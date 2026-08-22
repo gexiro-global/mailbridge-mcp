@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose an improvement that preserves the public security boundary.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: User goal
+      description: Describe the user outcome, not only an implementation idea.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Read-only and synthetic boundary
+      description: Explain how this remains synthetic-only and performs zero mailbox writes.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Describe the tests that should prove the change.
+    validations:
+      required: true

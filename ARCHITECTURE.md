@@ -12,6 +12,10 @@ UI separate so each layer can be audited independently.
 4. `src/demo-data.ts` is the only mailbox provider and uses reserved `.invalid` domains.
 5. `src/widget.ts` renders only structured tool output and has no external dependencies.
 
+Structured tools declare output schemas that match their returned
+`structuredContent`. The standard `search` and `fetch` knowledge-source tools
+remain data-first and do not force the widget to render.
+
 ## Read-only invariant
 
 There is no SMTP implementation and no mailbox mutation interface. Every MCP

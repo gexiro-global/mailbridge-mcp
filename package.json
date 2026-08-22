@@ -1,9 +1,27 @@
 {
   "name": "@gexiro/mailbridge-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Security-first, read-only email intelligence reference app for MCP and ChatGPT.",
   "type": "module",
   "license": "Apache-2.0",
+  "author": "Gexiro Global Enterprises Ltd.",
+  "homepage": "https://github.com/gexiro-global/mailbridge-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gexiro-global/mailbridge-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gexiro-global/mailbridge-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-apps",
+    "chatgpt",
+    "email",
+    "read-only",
+    "security"
+  ],
+  "packageManager": "npm@11.17.0",
   "engines": {
     "node": ">=24.0.0"
   },
@@ -18,7 +36,7 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

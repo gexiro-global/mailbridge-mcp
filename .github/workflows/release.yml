@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    name: Build, attest, and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Verify release source
+        run: npm run check
+      - name: Build release artifacts
+        shell: bash
+        run: |
+          mkdir release
+          package_file="$(npm pack --ignore-scripts --silent)"
+          mv "$package_file" "release/mailbridge-mcp-${GITHUB_REF_NAME}.tgz"
+          npm sbom --sbom-format cyclonedx > release/mailbridge-sbom.cdx.json
+          sha256sum "release/mailbridge-mcp-${GITHUB_REF_NAME}.tgz" release/mailbridge-sbom.cdx.json > release/SHA256SUMS
+      - name: Attest release provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            release/mailbridge-mcp-${{ github.ref_name }}.tgz
+            release/mailbridge-sbom.cdx.json
+      - name: Preserve release evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: mailbridge-${{ github.ref_name }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${{ github.ref_name }}" release/*
+          --verify-tag --generate-notes --title "MailBridge MCP ${{ github.ref_name }}"

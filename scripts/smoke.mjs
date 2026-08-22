@@ -12,6 +12,7 @@ await client.connect(new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`)
 try {
   const tools = await client.listTools();
   const resources = await client.listResources();
+  const resource = await client.readResource({ uri: "ui://mailbridge/demo-dashboard-v2.html" });
   const mailboxes = await client.callTool({ name: "list_mailboxes", arguments: {} });
   const payload = mailboxes.structuredContent;
   if (!payload || !Array.isArray(payload.mailboxes) || payload.mailboxes.length !== 2) {
@@ -19,11 +20,15 @@ try {
   }
   if (tools.tools.length !== 11) throw new Error(`unexpected tool count: ${tools.tools.length}`);
   if (resources.resources.length !== 1) throw new Error(`unexpected resource count: ${resources.resources.length}`);
+  if (resource.contents.length !== 1 || resource.contents[0]?.mimeType !== "text/html;profile=mcp-app") {
+    throw new Error("widget resource read failed");
+  }
   console.log(JSON.stringify({
     status: "PASS",
     health: healthBody.status,
     tools: tools.tools.length,
     resources: resources.resources.length,
+    resources_read: resource.contents.length,
     mailboxes: payload.mailboxes.length,
     write_operations: 0,
   }));

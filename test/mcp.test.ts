@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { createMailBridgeServer } from "../src/server.js";
-import { MAILBRIDGE_WIDGET_URI } from "../src/widget.js";
+import { MAILBRIDGE_WIDGET_URI, MCP_APPS_PROTOCOL_VERSION } from "../src/widget.js";
 
 const closers: Array<() => Promise<void>> = [];
 afterEach(async () => Promise.allSettled(closers.splice(0).map((close) => close())));
@@ -38,6 +38,8 @@ describe("MCP contract", () => {
     expect(result.tools.every((tool) => tool.annotations?.destructiveHint === false)).toBe(true);
     expect(result.tools.every((tool) => tool.annotations?.idempotentHint === true)).toBe(true);
     expect(JSON.stringify(result.tools.map((tool) => tool.inputSchema))).not.toMatch(/password|username|credential|imap_host/i);
+    const structuredTools = result.tools.filter((tool) => !["search", "fetch"].includes(tool.name));
+    expect(structuredTools.every((tool) => tool.outputSchema?.type === "object")).toBe(true);
   });
 
   it("implements the standard search and fetch response shape", async () => {
@@ -64,6 +66,29 @@ describe("MCP contract", () => {
     }));
   });
 
+  it("validates every structured result against its declared output schema", async () => {
+    const client = await connectedClient();
+    const calls = [
+      { name: "list_mailboxes", arguments: {} },
+      { name: "mailbox_health", arguments: {} },
+      { name: "list_folders", arguments: {} },
+      { name: "list_recent_messages", arguments: { limit: 5 } },
+      { name: "search_messages", arguments: { free_text: "ATLAS", limit: 5 } },
+      { name: "fetch_message", arguments: { stable_message_id: "msg_atlas_001" } },
+      { name: "fetch_thread", arguments: { stable_message_id: "msg_atlas_001", max_messages: 20 } },
+      { name: "list_attachments", arguments: { stable_message_id: "msg_atlas_001" } },
+      {
+        name: "fetch_attachment",
+        arguments: { stable_message_id: "msg_atlas_001", attachment_id: "att_atlas_brief", max_bytes: 1024 },
+      },
+    ];
+    for (const call of calls) {
+      const result = await client.callTool(call);
+      expect(result.isError, call.name).not.toBe(true);
+      expect(result.structuredContent, call.name).toBeTypeOf("object");
+    }
+  });
+
   it("registers an MCP Apps widget resource", async () => {
     const client = await connectedClient();
     const resources = await client.listResources();
@@ -75,6 +100,11 @@ describe("MCP contract", () => {
       uri: MAILBRIDGE_WIDGET_URI,
       mimeType: "text/html;profile=mcp-app",
     }));
+    const html = (resource.contents[0] as { text?: string }).text ?? "";
+    expect(html).toContain('method: "ui/initialize"');
+    expect(html).toContain('method: "ui/notifications/initialized"');
+    expect(html).toContain('method === "ui/notifications/tool-result"');
+    expect(html).toContain(`protocolVersion: "${MCP_APPS_PROTOCOL_VERSION}"`);
   });
 
   it("does not change unread state after fetch", async () => {

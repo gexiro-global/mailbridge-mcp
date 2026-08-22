@@ -24,5 +24,9 @@ Security invariants:
 - loopback-only binding by default;
 - no production configuration or endpoints in the repository.
 
+Release archives include SHA-256 checksums, a CycloneDX SBOM, and GitHub
+artifact provenance attestations. See [THREAT_MODEL.md](THREAT_MODEL.md) for
+assets, trust boundaries, controls, and mandatory security-review triggers.
+
 If a future contribution introduces real authentication, IMAP, persistence, or
 public hosting, it requires a separate threat model and maintainer approval.
