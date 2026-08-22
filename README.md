@@ -1,7 +1,11 @@
 # MailBridge MCP
 
+[![MailBridge MCP — read-only email intelligence](docs/assets/mailbridge-social-preview.png)](https://github.com/gexiro-global/mailbridge-mcp)
+
 [![CI](https://github.com/gexiro-global/mailbridge-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/gexiro-global/mailbridge-mcp/actions/workflows/ci.yml)
+[![Container](https://github.com/gexiro-global/mailbridge-mcp/actions/workflows/container.yml/badge.svg)](https://github.com/gexiro-global/mailbridge-mcp/actions/workflows/container.yml)
 [![CodeQL](https://github.com/gexiro-global/mailbridge-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/gexiro-global/mailbridge-mcp/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/gexiro-global/mailbridge-mcp)](https://github.com/gexiro-global/mailbridge-mcp/releases/latest)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **Security-first, read-only email intelligence for MCP-compatible AI assistants.**
@@ -20,7 +24,9 @@ without credentials or access to a real inbox.
 
 - Eleven deliberately read-only MCP tools.
 - Standard `search` and `fetch` contracts for knowledge-source compatibility.
+- Explicit output schemas for every structured tool result.
 - MCP Apps widget with a versioned `ui://` resource.
+- Standards-first `ui/initialize` and `ui/notifications/initialized` handshake.
 - Multi-mailbox and all-folder search behavior.
 - Thread reconstruction using `Message-ID`, `In-Reply-To`, and `References`.
 - Bounded attachment retrieval with SHA-256 checksums.
@@ -69,6 +75,18 @@ To connect from an MCP client, use the streamable HTTP endpoint `/mcp`. For
 ChatGPT developer testing, expose the loopback service through a reviewed HTTPS
 tunnel and refresh the app after tool or resource metadata changes.
 
+### Docker
+
+The container remains synthetic-only and runs as the unprivileged `node` user.
+
+```bash
+docker build -t mailbridge-mcp .
+docker run --rm -p 127.0.0.1:3100:3100 \
+  -e MAILBRIDGE_HOST=0.0.0.0 \
+  -e MAILBRIDGE_ALLOW_PUBLIC_DEMO=I_UNDERSTAND_SYNTHETIC_ONLY \
+  mailbridge-mcp
+```
+
 ## Architecture
 
 ```mermaid
@@ -93,9 +111,14 @@ storage, and deployment topology are outside this repository.
 - The HTTP runtime refuses non-loopback binding unless the explicit synthetic
   demo acknowledgement is set.
 - CI runs compilation, tests, repository secret scanning, dependency audit,
-  dependency review, and CodeQL.
+  dependency review, CodeQL, a real container smoke test, and SBOM validation.
+- The container gate fails closed on detected High or Critical CVEs and strips
+  package managers from the runtime image after dependency installation.
+- Tagged releases contain SHA-256 checksums, a CycloneDX SBOM, and GitHub
+  artifact provenance attestations.
 
-See [SECURITY.md](SECURITY.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+See [SECURITY.md](SECURITY.md), [THREAT_MODEL.md](THREAT_MODEL.md),
+[PRIVACY.md](PRIVACY.md), and [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## OpenAI Apps SDK alignment
 
@@ -110,10 +133,25 @@ The implementation follows the current MCP Apps-first guidance:
 
 Official references:
 
-- [Build an MCP server](https://developers.openai.com/apps-sdk/build/mcp-server)
-- [Add UI to your MCP server](https://developers.openai.com/apps-sdk/build/chatgpt-ui)
-- [Define tools](https://developers.openai.com/apps-sdk/plan/tools)
-- [Apps SDK reference](https://developers.openai.com/apps-sdk/reference)
+- [Build an MCP server](https://developers.openai.com/plugins/build/mcp-server)
+- [Add UI to your MCP server](https://developers.openai.com/plugins/build/chatgpt-ui)
+- [Define tools](https://developers.openai.com/plugins/plan/tools)
+- [Plugin reference](https://developers.openai.com/plugins/reference)
+
+## Release integrity
+
+Each tagged release is built from locked dependencies in GitHub Actions. Verify
+the downloaded archive and SBOM with the included `SHA256SUMS`, then verify the
+GitHub artifact attestation against this repository before use.
+
+## Project policies
+
+- [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Support](SUPPORT.md)
+- [Security](SECURITY.md)
+- [Privacy](PRIVACY.md)
 
 ## License
 

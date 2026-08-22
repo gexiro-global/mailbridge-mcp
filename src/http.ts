@@ -5,6 +5,7 @@ import type { Server } from "node:http";
 import { DemoMailService } from "./service.js";
 import { createMailBridgeServer } from "./server.js";
 import { mailbridgeWidgetHtml } from "./widget.js";
+import { MAILBRIDGE_VERSION } from "./version.js";
 
 export interface HttpOptions {
   host: string;
@@ -24,7 +25,7 @@ export async function startHttpServer(options: HttpOptions): Promise<{ server: S
   app.disable("x-powered-by");
   app.use(securityHeaders);
   app.get("/health", (_request, response) => {
-    response.json({ status: "ok", service: "mailbridge-mcp-community", version: "1.0.0", mode: "SYNTHETIC_DEMO" });
+    response.json({ status: "ok", service: "mailbridge-mcp-community", version: MAILBRIDGE_VERSION, mode: "SYNTHETIC_DEMO" });
   });
   app.get("/widget", (_request, response) => {
     response.type("html").send(mailbridgeWidgetHtml());

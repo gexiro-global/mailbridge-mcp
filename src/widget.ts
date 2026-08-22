@@ -1,4 +1,7 @@
-export const MAILBRIDGE_WIDGET_URI = "ui://mailbridge/demo-dashboard-v1.html";
+import { MAILBRIDGE_VERSION } from "./version.js";
+
+export const MAILBRIDGE_WIDGET_URI = "ui://mailbridge/demo-dashboard-v2.html";
+export const MCP_APPS_PROTOCOL_VERSION = "2026-01-26";
 
 export function mailbridgeWidgetHtml(): string {
   return `<!doctype html>
@@ -32,6 +35,7 @@ export function mailbridgeWidgetHtml(): string {
   </main>
   <script>
     const target = document.getElementById("mailboxes");
+    const initializeId = 1;
     function render(payload) {
       const mailboxes = payload && Array.isArray(payload.mailboxes) ? payload.mailboxes : [];
       if (!mailboxes.length) return;
@@ -48,11 +52,34 @@ export function mailbridgeWidgetHtml(): string {
       }));
     }
     window.addEventListener("message", (event) => {
+      if (event.source !== window.parent) return;
       const message = event.data;
+      if (message && message.jsonrpc === "2.0" && message.id === initializeId && message.result) {
+        window.parent.postMessage({
+          jsonrpc: "2.0",
+          method: "ui/notifications/initialized",
+        }, "*");
+      }
       if (message && message.jsonrpc === "2.0" && message.method === "ui/notifications/tool-result") {
         render(message.params && message.params.structuredContent);
       }
     });
+    if (window.parent !== window) {
+      window.parent.postMessage({
+        jsonrpc: "2.0",
+        id: initializeId,
+        method: "ui/initialize",
+        params: {
+          protocolVersion: "${MCP_APPS_PROTOCOL_VERSION}",
+          appInfo: {
+            name: "mailbridge-dashboard",
+            title: "MailBridge",
+            version: "${MAILBRIDGE_VERSION}"
+          },
+          appCapabilities: {}
+        }
+      }, "*");
+    }
     if (window.openai && window.openai.toolOutput) render(window.openai.toolOutput);
   </script>
 </body>

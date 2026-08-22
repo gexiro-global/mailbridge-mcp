@@ -1,0 +1,63 @@
+name: Container
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Build and smoke container
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Build image
+        run: docker build --pull --tag mailbridge-mcp:${{ github.sha }} .
+      - name: Scan image for High and Critical CVEs
+        shell: bash
+        run: |
+          docker save --output mailbridge-image.tar mailbridge-mcp:${{ github.sha }}
+          docker run --rm --volume "$PWD/mailbridge-image.tar:/image.tar:ro" \
+            aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
+            image --input /image.tar --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --quiet
+      - name: Start synthetic container
+        run: >-
+          docker run --detach --name mailbridge-smoke --publish 3100:3100
+          --env MAILBRIDGE_HOST=0.0.0.0
+          --env MAILBRIDGE_PUBLIC_BASE_URL=http://127.0.0.1:3100
+          --env MAILBRIDGE_ALLOW_PUBLIC_DEMO=I_UNDERSTAND_SYNTHETIC_ONLY
+          mailbridge-mcp:${{ github.sha }}
+      - name: Wait for health
+        shell: bash
+        run: |
+          for _ in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3100/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs mailbridge-smoke
+          exit 1
+      - name: Run MCP smoke test
+        run: npm run smoke
+      - name: Stop container
+        if: always()
+        run: docker rm --force mailbridge-smoke

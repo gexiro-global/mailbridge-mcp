@@ -31,5 +31,12 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Verify
         run: npm run check
+      - name: Validate package contents
+        run: npm pack --dry-run --ignore-scripts
+      - name: Generate and validate CycloneDX SBOM
+        shell: bash
+        run: |
+          npm sbom --sbom-format cyclonedx > mailbridge-sbom.cdx.json
+          node -e "JSON.parse(require('node:fs').readFileSync('mailbridge-sbom.cdx.json','utf8'))"
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
