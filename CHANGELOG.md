@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.1 — 2026-08-26
+
+- separated loopback development setup from an explicit, fail-closed production
+  configuration and Docker Compose profile;
+- added local and production doctor commands that enumerate required secret-file
+  references without reading secret values;
+- strengthened mailbox-network target validation and settings-session handling;
+- separated mailbox-settings writes into the dedicated `mail.settings.write`
+  scope and made single-mailbox deletion require the exact mailbox ID;
+- made Linux production installs deterministic across full and production-only
+  dependency trees, with fail-closed container secret provisioning;
+- updated Apps SDK resource metadata, versioned widget URIs and compatibility
+  with current ChatGPT tool-result metadata envelopes;
+- made the public widgets and synthetic demo consistently English by default;
+- replaced historic Safe Send staging wording with version-neutral operational
+  guidance;
+- expanded deployment, authentication, privacy, support and public-launch
+  documentation with self-hosted/cost/affiliation and Settings API boundaries;
+- hardened release automation with exact-version receiver tests, checksums,
+  SBOM and provenance gates. See the
+  [2.0.1 candidate verification](docs/RELEASE_VERIFICATION_2.0.1.md).
+
 ## 2.0.0 — 2026-08-26
 
 - replaced the synthetic-only reference runtime with real multi-mailbox IMAP;

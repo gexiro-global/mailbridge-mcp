@@ -186,6 +186,9 @@ export function assertRuntimeSafety(config: MailBridgeConfig, environment: strin
   if (environment === "production" && !config.app.enabled) {
     throw new Error("Production ChatGPT App mode must be explicitly enabled");
   }
+  if (config.app.enabled && !config.auth.scopes.includes("mail.settings.write")) {
+    throw new Error("ChatGPT App mailbox management requires the mail.settings.write OAuth scope");
+  }
   if (environment === "production") {
     for (const [label, url] of [
       ["server.public_base_url", publicUrl],
@@ -195,6 +198,9 @@ export function assertRuntimeSafety(config: MailBridgeConfig, environment: strin
       ["app.widget_origin", widgetUrl],
     ] as const) {
       if (url.protocol !== "https:") throw new Error(`${label} must use HTTPS in production`);
+      if (url.hostname.endsWith(".example.invalid")) {
+        throw new Error(`${label} still contains a production-template placeholder`);
+      }
     }
     if (loopback.has(publicUrl.hostname)) {
       throw new Error("Production public_base_url must be reachable from every authorized device, not loopback");
@@ -207,6 +213,9 @@ export function assertRuntimeSafety(config: MailBridgeConfig, environment: strin
     }
     if (config.auth.allowed_subjects.length === 0) {
       throw new Error("Private production mode requires an explicit OAuth subject allowlist");
+    }
+    if (config.auth.allowed_subjects.some((subject) => /^replace[_-]?with/i.test(subject))) {
+      throw new Error("Production OAuth subject allowlist still contains a template placeholder");
     }
     if (config.auth.mode === "cloudflare_access" && !config.auth.access_audience) {
       throw new Error("Cloudflare Access mode requires the immutable Access application AUD tag");

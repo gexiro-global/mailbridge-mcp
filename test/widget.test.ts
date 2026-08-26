@@ -27,8 +27,13 @@ describe("Apps SDK widget", () => {
     expect(html).not.toMatch(/\bconfirm\s*\(/);
     expect(html).not.toMatch(/\bprompt\s*\(/);
     expect(html).toContain("Safe Send policy");
+    expect(html).toContain('id="deleteMailboxConfirmationLabel"');
+    expect(html).toContain("if(confirmation!==id)");
+    expect(html).not.toContain('confirmation!=="DELETE"');
     expect(html).toContain("DELETE ALL MAILBRIDGE DATA");
     expect(html).toContain("toolResponseMetadata");
+    expect(html).toContain("mcp_tool_result");
+    expect(html).toContain('lang="en"');
     expect(html).toContain("X-MailBridge-CSRF");
     const scripts = [...html.matchAll(/<script(?:\s+type="module")?>([\s\S]*?)<\/script>/gi)];
     expect(scripts.length).toBeGreaterThan(0);
@@ -38,6 +43,8 @@ describe("Apps SDK widget", () => {
   it("implements a bridge-first Safe Send preview without browser persistence or native confirmation dialogs", () => {
     const html = mailbridgeSafeSendWidgetHtml();
     expect(html).toContain("MailBridge Safe Send");
+    expect(html).toContain('lang="en"');
+    expect(html).toContain("Draft → validation → one-time confirmation → SMTP");
     expect(html).toContain('request("tools/call"');
     expect(html).toContain('message.method==="ui/notifications/tool-result"');
     expect(html).toContain('callTool("update_draft"');
@@ -54,7 +61,7 @@ describe("Apps SDK widget", () => {
     expect(() => new Function(scripts[0]?.[1] ?? "")).not.toThrow();
   });
 
-  it("registers the mcp-app resource and keeps settings authorization only in result _meta", async () => {
+  it("registers a separately scoped settings tool and keeps authorization only in result _meta", async () => {
     const service = new MailService(testConfig, new FakeFactory(), new StableIdCodec("0123456789abcdef0123456789abcdef"));
     const server = createMailBridgeMcpServer(service, true, {
       settingsApiUrl: "https://mailbridge.example.invalid/api",
@@ -72,12 +79,17 @@ describe("Apps SDK widget", () => {
     const resource = await client.readResource({ uri: MAILBRIDGE_WIDGET_URI });
     expect(resource.contents[0]?.mimeType).toBe("text/html;profile=mcp-app");
     expect(resource.contents[0]?._meta).toHaveProperty("ui.csp.connectDomains");
+    expect(resource.contents[0]?._meta).toHaveProperty("openai/widgetDescription");
 
     const tools = await client.listTools();
     const listTool = tools.tools.find((tool) => tool.name === "list_mailboxes");
-    expect(listTool?._meta).toHaveProperty("ui.resourceUri", MAILBRIDGE_WIDGET_URI);
+    const settingsTool = tools.tools.find((tool) => tool.name === "open_mailbox_settings");
+    expect(listTool?._meta).not.toHaveProperty("ui.resourceUri");
+    expect(settingsTool?._meta).toHaveProperty("ui.resourceUri", MAILBRIDGE_WIDGET_URI);
     expect(tools.tools.every((tool) => JSON.stringify(tool._meta?.securitySchemes) === JSON.stringify([{ type: "noauth" }]))).toBe(true);
-    const result = await client.callTool({ name: "list_mailboxes", arguments: {} });
+    const listResult = await client.callTool({ name: "list_mailboxes", arguments: {} });
+    expect(listResult._meta).toBeUndefined();
+    const result = await client.callTool({ name: "open_mailbox_settings", arguments: {} });
     expect(result._meta).toMatchObject({ settings_token: "one-time-secret-token", settings_csrf: "one-time-csrf" });
     expect(JSON.stringify(result.content)).not.toMatch(/one-time-secret-token|one-time-csrf/);
     expect(JSON.stringify(result.structuredContent)).not.toMatch(/one-time-secret-token|one-time-csrf/);
@@ -100,6 +112,7 @@ describe("Apps SDK widget", () => {
     const resource = await client.readResource({ uri: MAILBRIDGE_WIDGET_URI });
     expect(resource.contents[0]?.mimeType).toBe("text/html;profile=mcp-app");
     expect(resource.contents[0]?._meta).toMatchObject({ ui: { csp: { connectDomains: [] } } });
+    expect(resource.contents[0]?._meta).toHaveProperty("openai/widgetDescription");
     expect(resource.contents[0]?.text).toContain("IMAP reading remains read-only");
     expect(resource.contents[0]?.text).toContain("explicitly approved actions");
     expect(resource.contents[0]?.text).not.toContain("settings_api_url");
@@ -151,7 +164,13 @@ describe("Apps SDK widget", () => {
       "get_send_status", "list_send_audit", "create_draft", "reply_draft", "send_draft", "send_email", "reply_email",
     ]);
     for (const tool of tools.tools) {
-      const scopes = tool.name === "mailbox_health" ? ["mail.health.read"] : sendNames.has(tool.name) ? ["mail.send"] : ["mail.read"];
+      const scopes = tool.name === "mailbox_health"
+        ? ["mail.health.read"]
+        : tool.name === "open_mailbox_settings"
+          ? ["mail.settings.write"]
+          : sendNames.has(tool.name)
+            ? ["mail.send"]
+            : ["mail.read"];
       expect(tool._meta?.securitySchemes).toEqual([{ type: "oauth2", scopes }]);
     }
   });

@@ -1,12 +1,15 @@
 # Security policy
 
-## Supported version
+## Supported versions
 
-The latest release and current `main` branch are supported.
+Security fixes target the latest published release and the current `main`
+branch. Older release lines may not receive backports. Confirm the affected
+version privately before sharing reproduction details.
 
 ## Reporting
 
-Use GitHub private vulnerability reporting. Never open a public issue containing
+Use [GitHub private vulnerability reporting](https://github.com/gexiro-global/mailbridge-mcp/security/advisories/new).
+Never open a public issue containing
 credentials, tokens, private keys, real email content, mailbox addresses,
 production hostnames or unredacted logs.
 
@@ -26,6 +29,10 @@ production hostnames or unredacted logs.
 
 Release archives include SHA-256 checksums, a CycloneDX SBOM and GitHub
 provenance attestations. See [THREAT_MODEL.md](THREAT_MODEL.md).
+
+These controls reduce known risks but are not a guarantee that a deployment is
+secure. Email and attachments remain untrusted input, and each operator must
+validate its own OAuth, proxy, network, provider and backup configuration.
 
 ## Operator responsibilities
 

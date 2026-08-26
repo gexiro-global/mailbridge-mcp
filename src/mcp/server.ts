@@ -13,7 +13,16 @@ import { SendPolicySchema } from "../app/types.js";
 
 type ToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
-const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+class ToolAuthorizationError extends Error {
+  constructor(readonly requiredScope: string, readonly reason: "authentication_required" | "insufficient_scope") {
+    super(reason === "authentication_required" ? "Authentication required" : "Insufficient scope");
+    this.name = "ToolAuthorizationError";
+  }
+}
+
+const localReadAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+const externalReadAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
+const settingsAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
 const draftAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 const localWriteAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 const sendAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true } as const;
@@ -125,6 +134,16 @@ const messageDetailSchema = messageSummarySchema.extend({
   references: z.array(z.string()),
   source_truncated: z.boolean(),
 });
+const knowledgeSearchSchema = z.object({
+  results: z.array(z.object({ id: z.string(), title: z.string(), url: z.url() })),
+});
+const knowledgeFetchSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  text: z.string(),
+  url: z.url(),
+  metadata: z.record(z.string(), z.unknown()),
+});
 
 export interface MailBridgeWidgetOptions {
   settingsApiUrl?: string;
@@ -157,7 +176,11 @@ export function createMailBridgeMcpServer(
   const healthSecuritySchemes = allowLocalUnauthenticated || service.config.auth.mode === "disabled_dev"
     ? [{ type: "noauth" as const }]
     : [{ type: "oauth2" as const, scopes: ["mail.health.read"] }];
+  const settingsSecuritySchemes = allowLocalUnauthenticated || service.config.auth.mode === "disabled_dev"
+    ? [{ type: "noauth" as const }]
+    : [{ type: "oauth2" as const, scopes: ["mail.settings.write"] }];
   const widgetConnectDomains = widget?.settingsApiUrl ? [new URL(widget.settingsApiUrl).origin] : [];
+  const hasSettingsUi = Boolean(widget?.settingsApiUrl && widget.issueSettingsSession);
 
   if (widget) {
     server.registerResource(
@@ -176,6 +199,9 @@ export function createMailBridgeMcpServer(
           "openai/widgetDomain": widget.widgetOrigin,
           "openai/widgetPrefersBorder": true,
           "openai/widgetCSP": { connect_domains: widgetConnectDomains, resource_domains: [] },
+          "openai/widgetDescription": hasSettingsUi
+            ? "Manage this user's encrypted IMAP mailbox connections and Safe Send policies."
+            : "Review the user's configured MailBridge mailboxes and connection state.",
         },
       },
       async () => ({
@@ -192,6 +218,9 @@ export function createMailBridgeMcpServer(
             "openai/widgetDomain": widget.widgetOrigin,
             "openai/widgetPrefersBorder": true,
             "openai/widgetCSP": { connect_domains: widgetConnectDomains, resource_domains: [] },
+            "openai/widgetDescription": hasSettingsUi
+              ? "Manage this user's encrypted IMAP mailbox connections and Safe Send policies."
+              : "Review the user's configured MailBridge mailboxes and connection state.",
           },
         }],
       }),
@@ -205,7 +234,7 @@ export function createMailBridgeMcpServer(
       csp: { connectDomains: [] as string[], resourceDomains: [] as string[] },
     };
     server.registerResource(
-      "mailbridge-safe-send-v0.4",
+      "mailbridge-safe-send-v2.0.1",
       MAILBRIDGE_SAFE_SEND_WIDGET_URI,
       {
         title: "MailBridge Safe Send",
@@ -216,6 +245,7 @@ export function createMailBridgeMcpServer(
           ...(widget ? { "openai/widgetDomain": widget.widgetOrigin } : {}),
           "openai/widgetPrefersBorder": true,
           "openai/widgetCSP": { connect_domains: [], resource_domains: [] },
+          "openai/widgetDescription": "Preview, validate and explicitly confirm an email draft before SMTP submission.",
         },
       },
       async () => ({
@@ -228,6 +258,7 @@ export function createMailBridgeMcpServer(
             ...(widget ? { "openai/widgetDomain": widget.widgetOrigin } : {}),
             "openai/widgetPrefersBorder": true,
             "openai/widgetCSP": { connect_domains: [], resource_domains: [] },
+            "openai/widgetDescription": "Preview, validate and explicitly confirm an email draft before SMTP submission.",
           },
         }],
       }),
@@ -245,14 +276,16 @@ export function createMailBridgeMcpServer(
         enabled: z.boolean(), connection_status: z.enum(["unknown", "connected", "error"]),
         last_successful_check: z.string().nullable(),
       })) }),
-      annotations,
-      ...(widget ? { _meta: {
-        ui: { resourceUri: MAILBRIDGE_WIDGET_URI },
-        "openai/outputTemplate": MAILBRIDGE_WIDGET_URI,
-        "openai/toolInvocation/invoking": "Loading MailBridge settings…",
-        "openai/toolInvocation/invoked": "MailBridge settings ready",
+      annotations: localReadAnnotations,
+      _meta: {
         securitySchemes: toolSecuritySchemes,
-      } } : {}),
+        ...(widget && !hasSettingsUi ? {
+          ui: { resourceUri: MAILBRIDGE_WIDGET_URI },
+          "openai/outputTemplate": MAILBRIDGE_WIDGET_URI,
+          "openai/toolInvocation/invoking": "Loading MailBridge mailboxes…",
+          "openai/toolInvocation/invoked": "MailBridge mailboxes ready",
+        } : {}),
+      },
     },
     async (_input, extra) => execute(
       "list_mailboxes",
@@ -260,19 +293,46 @@ export function createMailBridgeMcpServer(
       "mail.read",
       allowLocalUnauthenticated,
       async () => ({ mailboxes: service.listMailboxes() }),
-      widget ? () => {
-        if (!widget.settingsApiUrl || !widget.issueSettingsSession) return { read_only_widget: true };
-        const session = widget.issueSettingsSession(extra);
-        return {
-          settings_api_url: widget.settingsApiUrl,
-          settings_token: session.token,
-          settings_csrf: session.csrf,
-          settings_expires_at: session.expires_at,
-          ...(widget.localDemo ? { local_demo: true } : {}),
-        };
-      } : undefined,
+      widget && !hasSettingsUi ? () => ({ read_only_widget: true }) : undefined,
     ),
   );
+
+  if (widget && hasSettingsUi) {
+    server.registerTool(
+      "open_mailbox_settings",
+      {
+        title: "Open mailbox settings",
+        description: "Use this only when the user explicitly asks to add, test, update, disable or delete a mailbox or change its Safe Send policy.",
+        inputSchema: z.object({}),
+        outputSchema: z.object({ settings_ready: z.literal(true) }),
+        annotations: settingsAnnotations,
+        _meta: {
+          ui: { resourceUri: MAILBRIDGE_WIDGET_URI },
+          "openai/outputTemplate": MAILBRIDGE_WIDGET_URI,
+          "openai/toolInvocation/invoking": "Opening MailBridge settings…",
+          "openai/toolInvocation/invoked": "MailBridge settings ready",
+          securitySchemes: settingsSecuritySchemes,
+        },
+      },
+      async (_input, extra) => execute(
+        "open_mailbox_settings",
+        extra,
+        "mail.settings.write",
+        allowLocalUnauthenticated,
+        async () => ({ settings_ready: true as const }),
+        () => {
+          const session = widget.issueSettingsSession!(extra);
+          return {
+            settings_api_url: widget.settingsApiUrl,
+            settings_token: session.token,
+            settings_csrf: session.csrf,
+            settings_expires_at: session.expires_at,
+            ...(widget.localDemo ? { local_demo: true } : {}),
+          };
+        },
+      ),
+    );
+  }
 
   server.registerTool(
     "mailbox_health",
@@ -285,7 +345,7 @@ export function createMailBridgeMcpServer(
         authentication_successful: z.boolean(), folder_discovery_successful: z.boolean(),
         latency_ms: z.number().int(), error_category: z.string().nullable(), checked_at: z.string(),
       })) }),
-      annotations,
+      annotations: externalReadAnnotations,
       _meta: { securitySchemes: healthSecuritySchemes },
     },
     async ({ mailbox_id }, extra) => execute("mailbox_health", extra, "mail.health.read", allowLocalUnauthenticated, async () => ({
@@ -300,7 +360,7 @@ export function createMailBridgeMcpServer(
       description: "Use this when the user wants to inspect folders or mailbox counters. Lists discovered IMAP folders without selecting them for write access.",
       inputSchema: z.object({ mailbox_ids: z.array(z.string().max(64)).min(1).max(20) }),
       outputSchema: z.object({ folders: z.array(folderSchema), partial_failures: z.array(partialFailureSchema) }),
-      annotations,
+      annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
     async ({ mailbox_ids }, extra) => execute("list_folders", extra, "mail.read", allowLocalUnauthenticated, async () => {
@@ -331,7 +391,7 @@ export function createMailBridgeMcpServer(
         after: dateTime.optional(), before: dateTime.optional(),
       }),
       outputSchema: z.object({ messages: z.array(messageSummarySchema), partial_failures: z.array(partialFailureSchema), truncated: z.boolean() }),
-      annotations,
+      annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
     async (input, extra) => execute("list_recent_messages", extra, "mail.read", allowLocalUnauthenticated, () =>
@@ -352,7 +412,7 @@ export function createMailBridgeMcpServer(
         has_attachment: z.boolean().optional(), limit: z.number().int().min(1).max(100).default(20),
       }),
       outputSchema: z.object({ messages: z.array(messageSummarySchema), partial_failures: z.array(partialFailureSchema), truncated: z.boolean() }),
-      annotations,
+      annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
     async (input, extra) => execute("search_messages", extra, "mail.read", allowLocalUnauthenticated, () =>
@@ -369,7 +429,7 @@ export function createMailBridgeMcpServer(
         max_body_chars: z.number().int().min(1000).max(100_000).default(20_000),
       }),
       outputSchema: z.object({ message: messageDetailSchema }),
-      annotations,
+      annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
     async ({ stable_message_id, include_html, max_body_chars }, extra) =>
@@ -385,7 +445,7 @@ export function createMailBridgeMcpServer(
       description: "Use this when the user asks for the conversation around a message. Reconstructs a bounded thread using Message-ID, In-Reply-To and References, never subject alone.",
       inputSchema: z.object({ stable_message_id: z.string().min(10).max(4096), max_messages: z.number().int().min(1).max(50).default(20) }),
       outputSchema: z.object({ messages: z.array(messageDetailSchema), confidence: z.enum(["HIGH", "LOW"]), partial_failures: z.array(partialFailureSchema) }),
-      annotations,
+      annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
     async ({ stable_message_id, max_messages }, extra) => execute("fetch_thread", extra, "mail.read", allowLocalUnauthenticated, () =>
@@ -403,7 +463,7 @@ export function createMailBridgeMcpServer(
         untrusted_content_warning: z.string(),
         attachments: z.array(attachmentSchema),
       }),
-      annotations,
+      annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
     async ({ stable_message_id }, extra) => execute("list_attachments", extra, "mail.read", allowLocalUnauthenticated, async () => ({
@@ -440,7 +500,7 @@ export function createMailBridgeMcpServer(
         content_base64: z.string(),
         untrusted_content_warning: z.string(),
       }),
-      annotations,
+      annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
     async ({ stable_message_id, attachment_id, max_bytes }, extra) =>
@@ -456,7 +516,8 @@ export function createMailBridgeMcpServer(
       title: "Search all mail",
       description: "Use this when the user wants to search every enabled mailbox and every selectable folder as a read-only knowledge source.",
       inputSchema: z.object({ query: z.string().min(1).max(500) }),
-      annotations,
+      outputSchema: knowledgeSearchSchema,
+      annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
     async ({ query }, extra) => executeText("search", extra, "mail.read", allowLocalUnauthenticated, () => service.searchKnowledge(query)),
@@ -468,7 +529,8 @@ export function createMailBridgeMcpServer(
       title: "Fetch mail document",
       description: "Use this after search to fetch one complete bounded email document by its stable result id using BODY.PEEK semantics.",
       inputSchema: z.object({ id: z.string().min(10).max(4096) }),
-      annotations,
+      outputSchema: knowledgeFetchSchema,
+      annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
     async ({ id }, extra) => executeText("fetch", extra, "mail.read", allowLocalUnauthenticated, () => service.fetchKnowledge(id)),
@@ -482,7 +544,7 @@ export function createMailBridgeMcpServer(
         description: "Use this after creating a draft to open the MailBridge Safe Send preview, validation and explicit-confirmation UI.",
         inputSchema: z.object({ draft_id: draftId }),
         outputSchema: z.object({ draft: draftSchema, policy: policySchema }),
-        annotations,
+        annotations: localReadAnnotations,
         _meta: {
           securitySchemes: sendSecuritySchemes,
           ui: { resourceUri: MAILBRIDGE_SAFE_SEND_WIDGET_URI },
@@ -517,7 +579,7 @@ export function createMailBridgeMcpServer(
         description: "Use this to inspect the active redacted Safe Send policy for one mailbox before drafting or sending.",
         inputSchema: z.object({ mailbox_id: z.string().max(64) }),
         outputSchema: z.object({ policy: policySchema }),
-        annotations,
+        annotations: localReadAnnotations,
         _meta: { securitySchemes: sendSecuritySchemes },
       },
       async ({ mailbox_id }, extra) => execute("get_send_policy", extra, "mail.send", allowLocalUnauthenticated, async () => ({
@@ -532,7 +594,7 @@ export function createMailBridgeMcpServer(
         description: "Use this before confirmation to evaluate recipients, domains and persistent mailbox rate limits without sending or creating approval state.",
         inputSchema: z.object({ draft_id: draftId }),
         outputSchema: z.object({ validation: validationSchema, policy: policySchema }),
-        annotations,
+        annotations: localReadAnnotations,
         _meta: { securitySchemes: sendSecuritySchemes },
       },
       async ({ draft_id }, extra) => execute("validate_draft", extra, "mail.send", allowLocalUnauthenticated, async () => {
@@ -563,7 +625,7 @@ export function createMailBridgeMcpServer(
         description: "Use this to inspect a previous Safe Send operation. SMTP accepted means accepted by the outbound server, not guaranteed final delivery.",
         inputSchema: z.object({ operation_id: operationId }),
         outputSchema: z.object({ operation: operationSchema }),
-        annotations,
+        annotations: localReadAnnotations,
         _meta: { securitySchemes: sendSecuritySchemes },
       },
       async ({ operation_id }, extra) => execute("get_send_status", extra, "mail.send", allowLocalUnauthenticated, async () => ({
@@ -578,7 +640,7 @@ export function createMailBridgeMcpServer(
         description: "Use this to review recent Safe Send state transitions without returning message bodies, credentials or recipient addresses.",
         inputSchema: z.object({ limit: z.number().int().min(1).max(100).default(50) }),
         outputSchema: z.object({ events: z.array(auditEventSchema) }),
-        annotations,
+        annotations: localReadAnnotations,
         _meta: { securitySchemes: sendSecuritySchemes },
       },
       async ({ limit }, extra) => execute("list_send_audit", extra, "mail.send", allowLocalUnauthenticated, async () => ({
@@ -686,9 +748,13 @@ async function execute<T extends object>(
       ...(resultMeta ? { _meta: resultMeta() } : {}),
     };
   } catch (error) {
-    const safe = safeError(error);
+    const safe = authorizationSafeError(error) ?? safeError(error);
     logger.warn({ tool, caller, duration_ms: Math.round(performance.now() - started), success: false, error_category: safe.code }, "tool_call");
-    return { isError: true, content: [{ type: "text" as const, text: JSON.stringify({ error: safe }) }] };
+    return {
+      isError: true,
+      content: [{ type: "text" as const, text: JSON.stringify({ error: safe }) }],
+      ...(error instanceof ToolAuthorizationError ? { _meta: oauthChallenge(extra, error) } : {}),
+    };
   }
 }
 
@@ -705,18 +771,57 @@ async function executeText(
     requireScope(extra, requiredScope, allowLocalUnauthenticated);
     const data = await operation();
     logger.info({ tool, caller, duration_ms: Math.round(performance.now() - started), success: true }, "tool_call");
-    return { content: [{ type: "text" as const, text: JSON.stringify(data) }] };
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(data) }],
+      structuredContent: data as Record<string, unknown>,
+    };
   } catch (error) {
-    const safe = safeError(error);
+    const safe = authorizationSafeError(error) ?? safeError(error);
     logger.warn({ tool, caller, duration_ms: Math.round(performance.now() - started), success: false, error_category: safe.code }, "tool_call");
-    return { isError: true, content: [{ type: "text" as const, text: JSON.stringify({ error: safe }) }] };
+    return {
+      isError: true,
+      content: [{ type: "text" as const, text: JSON.stringify({ error: safe }) }],
+      ...(error instanceof ToolAuthorizationError ? { _meta: oauthChallenge(extra, error) } : {}),
+    };
   }
 }
 
 function requireScope(extra: ToolExtra, requiredScope: string, allowLocalUnauthenticated: boolean): void {
   if (!extra.authInfo) {
     if (allowLocalUnauthenticated) return;
-    throw new Error("Authentication required");
+    throw new ToolAuthorizationError(requiredScope, "authentication_required");
   }
-  if (!extra.authInfo.scopes.includes(requiredScope)) throw new Error("Insufficient scope");
+  if (!extra.authInfo.scopes.includes(requiredScope)) {
+    throw new ToolAuthorizationError(requiredScope, "insufficient_scope");
+  }
+}
+
+function authorizationSafeError(error: unknown): { code: string; message: string; retryable: false } | null {
+  if (!(error instanceof ToolAuthorizationError)) return null;
+  return {
+    code: error.reason === "authentication_required" ? "AUTHENTICATION_REQUIRED" : "INSUFFICIENT_SCOPE",
+    message: error.message,
+    retryable: false,
+  };
+}
+
+function oauthChallenge(extra: ToolExtra, error: ToolAuthorizationError): { "mcp/www_authenticate": string[] } {
+  let resourceMetadata = "";
+  try {
+    if (extra.authInfo?.resource) {
+      resourceMetadata = new URL("/.well-known/oauth-protected-resource", extra.authInfo.resource).toString();
+    }
+  } catch {
+    resourceMetadata = "";
+  }
+  const description = error.reason === "authentication_required"
+    ? `Authentication with ${error.requiredScope} is required`
+    : `Additional ${error.requiredScope} consent is required`;
+  const parameters = [
+    ...(resourceMetadata ? [`resource_metadata=\"${resourceMetadata}\"`] : []),
+    `scope=\"${error.requiredScope}\"`,
+    `error=\"${error.reason === "authentication_required" ? "invalid_token" : "insufficient_scope"}\"`,
+    `error_description=\"${description}\"`,
+  ];
+  return { "mcp/www_authenticate": [`Bearer ${parameters.join(", ")}`] };
 }

@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -35,10 +35,11 @@ describe("configuration", () => {
 
   it("requires a public HTTPS endpoint and one allowlisted owner in production", () => {
     const valid = structuredClone(testConfig);
+    makeProductionUrls(valid);
     valid.auth.mode = "oauth";
     valid.auth.allowed_subjects = ["operator-subject"];
     valid.app.enabled = true;
-    valid.server.allowed_hosts.push("mailbridge.example.invalid");
+    valid.server.allowed_hosts.push("mailbridge.example.com");
     expect(() => assertRuntimeSafety(valid, "production")).not.toThrow();
 
     const loopback = structuredClone(valid);
@@ -53,11 +54,12 @@ describe("configuration", () => {
 
   it("preserves the production Cloudflare Access authentication mode", () => {
     const valid = structuredClone(testConfig);
+    makeProductionUrls(valid);
     valid.auth.mode = "cloudflare_access";
     valid.auth.access_audience = "immutable-access-audience";
     valid.auth.allowed_subjects = ["operator-subject"];
     valid.app.enabled = true;
-    valid.server.allowed_hosts.push("mailbridge.example.invalid");
+    valid.server.allowed_hosts.push("mailbridge.example.com");
     expect(() => assertRuntimeSafety(valid, "production")).not.toThrow();
 
     delete valid.auth.access_audience;
@@ -66,11 +68,12 @@ describe("configuration", () => {
 
   it("allows fixed private-owner storage only for one OAuth subject", () => {
     const invalid = structuredClone(testConfig);
+    makeProductionUrls(invalid);
     invalid.auth.mode = "oauth";
     invalid.auth.allowed_subjects = ["operator-a", "operator-b"];
     invalid.app.enabled = true;
     invalid.app.user_key_mode = "fixed_private_owner";
-    invalid.server.allowed_hosts.push("mailbridge.example.invalid");
+    invalid.server.allowed_hosts.push("mailbridge.example.com");
     expect(() => assertRuntimeSafety(invalid, "production")).toThrow(/exactly one/);
   });
 
@@ -85,6 +88,21 @@ describe("configuration", () => {
     await expect(new FileSecretProvider(directory).read("../outside")).rejects.toThrow(/Invalid secret reference/);
   });
 
+  it("refuses symbolic-link secret references", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "mailbridge-secrets-"));
+    const outside = join(await mkdtemp(join(tmpdir(), "mailbridge-outside-")), "value");
+    await writeFile(outside, "must-not-be-read", "utf8");
+    try {
+      await symlink(outside, join(directory, "linked_secret"), "file");
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "EPERM") return;
+      throw error;
+    }
+    const provider = new FileSecretProvider(directory);
+    await expect(provider.exists("linked_secret")).resolves.toBe(false);
+    await expect(provider.read("linked_secret")).rejects.toThrow(/not a regular file/);
+  });
+
   it("replaces a secret through an atomic service-only file operation", async () => {
     const directory = await mkdtemp(join(tmpdir(), "mailbridge-secret-rotate-"));
     const provider = new FileSecretProvider(directory);
@@ -93,3 +111,10 @@ describe("configuration", () => {
     await expect(provider.read("rotated_secret")).resolves.toBe("second-value");
   });
 });
+
+function makeProductionUrls(config: typeof testConfig): void {
+  config.server.public_base_url = "https://mailbridge.example.com";
+  config.auth.issuer = "https://identity.example.com/";
+  config.auth.audience = "https://mailbridge.example.com";
+  config.auth.jwks_uri = "https://identity.example.com/.well-known/jwks.json";
+}

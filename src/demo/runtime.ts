@@ -96,7 +96,9 @@ export async function createLocalDemoRuntime(options: LocalDemoOptions): Promise
       issuer: `${baseUrl}/local-demo-identity`,
       audience: baseUrl,
       jwks_uri: `${baseUrl}/local-demo-jwks-unused`,
-      scopes: safeSend ? ["mail.read", "mail.health.read", "mail.send"] : ["mail.read", "mail.health.read"],
+      scopes: safeSend
+        ? ["mail.read", "mail.health.read", "mail.settings.write", "mail.send"]
+        : ["mail.read", "mail.health.read", "mail.settings.write"],
       allowed_subjects: ["local-demo-operator"],
     },
     privacy: {

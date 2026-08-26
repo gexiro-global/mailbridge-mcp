@@ -1,5 +1,44 @@
 services:
+  mailbridge-secret-init:
+    profiles:
+      - production
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mailbridge-mcp:local
+    user: "0:0"
+    read_only: true
+    init: true
+    restart: "no"
+    network_mode: none
+    entrypoint:
+      - /usr/bin/node
+    command:
+      - scripts/provision-container-secrets.mjs
+      - /source-secrets
+      - /runtime-secrets
+      - "10001"
+      - "10001"
+    volumes:
+      - ./secrets:/source-secrets:ro
+      - mailbridge_secrets:/runtime-secrets
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 32
+    mem_limit: 64m
+    cpus: 0.25
+
   mailbridge:
+    profiles:
+      - production
+    depends_on:
+      mailbridge-secret-init:
+        condition: service_completed_successfully
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,14 +52,14 @@ services:
       - "127.0.0.1:3091:3091"
     environment:
       NODE_ENV: production
-      MAILBRIDGE_CONFIG: /app/config/mailboxes.yaml
+      MAILBRIDGE_CONFIG: /app/config/mailboxes.production.yaml
       MAILBRIDGE_SECRET_DIR: /run/secrets/mailbridge
       MAILBRIDGE_ID_KEY_FILE: mailbridge_id_hmac_key
       MAILBRIDGE_LOG_LEVEL: info
       MAILBRIDGE_ALLOW_SEND: "false"
     volumes:
-      - ./config/mailboxes.yaml:/app/config/mailboxes.yaml:ro
-      - ./secrets:/run/secrets/mailbridge:ro
+      - ./config/mailboxes.production.yaml:/app/config/mailboxes.production.yaml:ro
+      - mailbridge_secrets:/run/secrets/mailbridge:ro
       - mailbridge_data:/app/runtime/data
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=16m
@@ -31,6 +70,7 @@ services:
     pids_limit: 128
     mem_limit: 512m
     cpus: 1.0
+    stop_grace_period: 15s
     networks:
       - mailbridge_private
 
@@ -40,4 +80,5 @@ networks:
     driver: bridge
 
 volumes:
+  mailbridge_secrets:
   mailbridge_data:

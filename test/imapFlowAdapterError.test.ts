@@ -35,6 +35,12 @@ describe("ImapFlowReadOnlyAdapter asynchronous errors", () => {
       sourceMaxBytes: 1024,
       snippetMaxChars: 128,
       attachmentMaxBytes: 1024,
+      endpointResolver: async (hostname) => ({
+        hostname,
+        address: "203.0.113.10",
+        family: 4,
+        address_count: 1,
+      }),
     });
 
     await expect(adapter.health()).resolves.toMatchObject({ connected: true });

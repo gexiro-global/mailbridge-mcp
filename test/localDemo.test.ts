@@ -25,7 +25,7 @@ describe("local synthetic demo", () => {
 
     expect(runtime.config.server.bind_host).toBe("127.0.0.1");
     expect(runtime.config.auth.mode).toBe("disabled_dev");
-    expect(runtime.config.auth.scopes).toEqual(["mail.read", "mail.health.read"]);
+    expect(runtime.config.auth.scopes).toEqual(["mail.read", "mail.health.read", "mail.settings.write"]);
     expect(runtime.config.app.database_path).toContain("mailbridge-local-demo.sqlite");
     const scoped = runtime.services.create();
     const mailboxes = scoped.service.listMailboxes();
@@ -69,7 +69,7 @@ describe("local synthetic demo", () => {
     });
 
     expect(runtime.safeSend).toBe(true);
-    expect(runtime.config.auth.scopes).toEqual(["mail.read", "mail.health.read", "mail.send"]);
+    expect(runtime.config.auth.scopes).toEqual(["mail.read", "mail.health.read", "mail.settings.write", "mail.send"]);
     const scoped = runtime.services.create();
     expect(scoped.writer).toBeDefined();
     const mailbox = scoped.service.listMailboxes()[0]!;

@@ -12,6 +12,7 @@ import { MailBridgeError } from "../domain/errors.js";
 import { textSnippet } from "../security/content.js";
 import { logger } from "../util/logger.js";
 import { MAILBRIDGE_VERSION } from "../version.js";
+import { resolvePublicEndpoint } from "../security/networkPolicy.js";
 import type {
   FolderSearchInput,
   RawAttachment,
@@ -25,6 +26,7 @@ interface AdapterOptions {
   sourceMaxBytes: number;
   snippetMaxChars: number;
   attachmentMaxBytes: number;
+  endpointResolver?: typeof resolvePublicEndpoint;
 }
 
 export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
@@ -40,7 +42,7 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
     const checkedAt = new Date().toISOString();
     let client: ImapFlow | undefined;
     try {
-      client = this.#createClient();
+      client = await this.#createClient();
       await client.connect();
       await client.list({ statusQuery: { messages: true, unseen: true } });
       return {
@@ -75,7 +77,7 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
   }
 
   async discoverFolders(): Promise<FolderSummary[]> {
-    const client = this.#createClient();
+    const client = await this.#createClient();
     try {
       await client.connect();
       const folders = await client.list({ statusQuery: { messages: true, unseen: true } });
@@ -95,7 +97,7 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
   }
 
   async search(input: FolderSearchInput): Promise<RawMessageSummary[]> {
-    const client = this.#createClient();
+    const client = await this.#createClient();
     try {
       await client.connect();
       const lock = await client.getMailboxLock(input.folder, {
@@ -144,7 +146,7 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
   }
 
   async fetch(folder: string, uidValidity: bigint, uid: number, maxBytes: number): Promise<RawMessageDetail> {
-    const client = this.#createClient();
+    const client = await this.#createClient();
     try {
       await client.connect();
       const lock = await client.getMailboxLock(folder, {
@@ -195,7 +197,7 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
   }
 
   async listAttachmentParts(folder: string, uidValidity: bigint, uid: number): Promise<RawAttachment[]> {
-    const client = this.#createClient();
+    const client = await this.#createClient();
     try {
       await client.connect();
       const lock = await client.getMailboxLock(folder, {
@@ -229,7 +231,7 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
     part: string,
     maxBytes: number,
   ): Promise<RawAttachmentContent> {
-    const client = this.#createClient();
+    const client = await this.#createClient();
     try {
       await client.connect();
       const lock = await client.getMailboxLock(folder, {
@@ -297,7 +299,7 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
     unchanged: boolean;
     reason: string;
   }> {
-    const client = this.#createClient();
+    const client = await this.#createClient();
     try {
       await client.connect();
       const lock = await client.getMailboxLock(folder, {
@@ -346,9 +348,11 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
     }
   }
 
-  #createClient(): ImapFlow {
+  async #createClient(): Promise<ImapFlow> {
+    const endpoint = await (this.options.endpointResolver ?? resolvePublicEndpoint)(this.mailbox.imap_host);
     const client = new ImapFlow({
-      host: this.mailbox.imap_host,
+      host: endpoint.address,
+      servername: endpoint.hostname,
       port: this.mailbox.imap_port,
       secure: this.mailbox.tls,
       ...(this.mailbox.tls ? {} : { doSTARTTLS: true }),
@@ -356,7 +360,7 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
       tls: {
         rejectUnauthorized: true,
         minVersion: "TLSv1.2",
-        servername: this.mailbox.imap_host,
+        servername: endpoint.hostname,
       },
       logger: false,
       logRaw: false,

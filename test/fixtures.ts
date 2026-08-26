@@ -20,7 +20,7 @@ export const testConfig: MailBridgeConfig = MailBridgeConfigSchema.parse({
     issuer: "https://identity.example.invalid/",
     audience: "https://mailbridge.example.invalid",
     jwks_uri: "https://identity.example.invalid/jwks.json",
-    scopes: ["mail.read", "mail.health.read", "mail.send"],
+    scopes: ["mail.read", "mail.health.read", "mail.settings.write", "mail.send"],
     allowed_subjects: [],
   },
   privacy: { snippet_max_chars: 320, body_max_chars: 20000, source_max_bytes: 5242880, audit_retention_days: 30 },

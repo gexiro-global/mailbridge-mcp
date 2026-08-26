@@ -9,6 +9,10 @@
 All read tools use accurate read-only/non-destructive annotations. Message and
 attachment reads use `BODY.PEEK` from `EXAMINE` folders and preserve IMAP flags.
 
+The mailbox Settings API is not a mail-message tool. User-approved add, replace,
+disable and delete operations write encrypted connector configuration and
+require the separate `mail.settings.write` OAuth scope.
+
 ## Optional Safe Send surface — 12 tools
 
 `open_mail_composer`, `create_draft`, `reply_draft`, `update_draft`,

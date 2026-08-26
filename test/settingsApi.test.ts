@@ -32,8 +32,8 @@ describe("user-scoped Settings API", () => {
     await new Promise<void>((resolve) => server.once("listening", resolve));
     servers.push(server);
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
-    const userA = sessionClient(base, sessions.issue("user-a"));
-    const userB = sessionClient(base, sessions.issue("user-b"));
+    const userA = sessionClient(base, issueSettings(sessions, "user-a"));
+    const userB = sessionClient(base, issueSettings(sessions, "user-b"));
 
     const originalPassword = "synthetic-original-password";
     const created = await userA.call("/mailboxes", "POST", {
@@ -59,8 +59,10 @@ describe("user-scoped Settings API", () => {
     expect((listA.data as { mailboxes: unknown[] }).mailboxes).toHaveLength(1);
     const listB = await userB.call("/mailboxes", "GET");
     expect((listB.data as { mailboxes: unknown[] }).mailboxes).toHaveLength(0);
-    const idor = await userB.call(`/mailboxes/${mailboxId}`, "DELETE", {});
+    const idor = await userB.call(`/mailboxes/${mailboxId}`, "DELETE", { confirmation: mailboxId });
     expect(idor.status).toBe(404);
+    const missingConfirmation = await userA.call(`/mailboxes/${mailboxId}`, "DELETE", {});
+    expect(missingConfirmation.status).toBe(400);
 
     const replacement = "synthetic-replacement-password";
     const replaced = await userA.call(`/mailboxes/${mailboxId}/replace-credentials`, "POST", {
@@ -114,13 +116,23 @@ describe("user-scoped Settings API", () => {
     await new Promise<void>((resolve) => server.once("listening", resolve));
     servers.push(server);
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
-    const issued = sessions.issue("user-a");
+    const issued = issueSettings(sessions, "user-a");
     const headers = { Authorization: `Settings ${issued.token}`, "X-MailBridge-CSRF": issued.csrf, Origin: "https://web-sandbox.oaiusercontent.com" };
     expect((await fetch(`${base}/mailboxes`, { headers })).status).toBe(200);
     expect((await fetch(`${base}/mailboxes`, { headers })).status).toBe(401);
     expect((await fetch(`${base}/mailboxes`, { headers: { ...headers, Origin: "https://evil.example" } })).status).toBe(403);
   });
+
+  it("never issues a settings capability without the dedicated write scope", () => {
+    const sessions = new OneTimeSettingsSessions(30_000);
+    expect(() => sessions.issue("user-a", { scopes: ["mail.read"], client_id: "read-only-client" }))
+      .toThrow(/settings scope/i);
+  });
 });
+
+function issueSettings(sessions: OneTimeSettingsSessions, userKey: string) {
+  return sessions.issue(userKey, { scopes: ["mail.settings.write"], client_id: "settings-api-test" });
+}
 
 function sessionClient(base: string, initial: { token: string; csrf: string }) {
   let token = initial.token;

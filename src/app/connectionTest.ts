@@ -1,11 +1,10 @@
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { connect as connectTcp } from "node:net";
 import { connect as connectTls } from "node:tls";
 import type { MailBridgeConfig, MailboxConfig } from "../config/schema.js";
 import { safeError } from "../domain/errors.js";
 import { DefaultImapAdapterFactory, type SecretReader } from "../imap/factory.js";
 import type { MailboxConnectionTestResult, MailboxCredentials, MailboxSettings } from "./types.js";
+import { resolvePublicEndpoint } from "../security/networkPolicy.js";
 
 export interface MailboxConnectionTester {
   test(settings: MailboxSettings, credentials: MailboxCredentials): Promise<MailboxConnectionTestResult>;
@@ -18,19 +17,16 @@ export class DirectMailboxConnectionTester implements MailboxConnectionTester {
     const started = performance.now();
     const result = emptyResult(settings.tls_mode);
     try {
-      const addresses = await lookup(settings.imap_host, { all: true, verbatim: true });
-      if (addresses.length === 0 || addresses.some((entry) => !isPublicAddress(entry.address))) {
-        throw new Error("IMAP_HOST_NOT_PUBLIC");
-      }
-      result.dns_resolution = { success: true, address_count: addresses.length };
-      result.tcp_connection = await tcpProbe(addresses[0]!.address, settings.imap_port);
+      const endpoint = await resolvePublicEndpoint(settings.imap_host);
+      result.dns_resolution = { success: true, address_count: endpoint.address_count };
+      result.tcp_connection = await tcpProbe(endpoint.address, settings.imap_port);
       if (!result.tcp_connection.success) throw new Error("TCP_CONNECTION_FAILED");
 
       if (settings.tls_mode === "implicit") {
         result.tls_verification = {
           success: true,
           mode: "implicit",
-          certificate: await tlsProbe(settings.imap_host, addresses[0]!.address, settings.imap_port),
+          certificate: await tlsProbe(endpoint.hostname, endpoint.address, settings.imap_port),
         };
       }
 
@@ -150,25 +146,6 @@ async function tlsProbe(hostname: string, address: string, port: number) {
     });
     socket.once("error", reject);
   });
-}
-
-function isPublicAddress(address: string): boolean {
-  if (isIP(address) === 4) {
-    const parts = address.split(".").map(Number);
-    const [a = 0, b = 0] = parts;
-    return !(
-      a === 0 || a === 10 || a === 127 || a >= 224 ||
-      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) ||
-      (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19)) ||
-      (a === 198 && b === 51) || (a === 203 && b === 0)
-    );
-  }
-  if (isIP(address) === 6) {
-    const normalized = address.toLowerCase();
-    return !(normalized === "::" || normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb") || normalized.startsWith("2001:db8"));
-  }
-  return false;
 }
 
 function finalize(result: MailboxConnectionTestResult, started: number): MailboxConnectionTestResult {

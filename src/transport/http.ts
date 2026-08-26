@@ -43,7 +43,10 @@ export async function startHttpTransport(
   }
   if (localDemo) {
     const renderDemo = (_request: Request, response: Response): void => {
-      const session = localDemo.sessions.issue(localDemo.userKey);
+      const session = localDemo.sessions.issue(localDemo.userKey, {
+        scopes: localDemo.config.auth.scopes,
+        client_id: "local-demo",
+      });
       response.type("html").send(mailbridgeWidgetHtml({
         localDemo: true,
         safeSendDemo: localDemo.safeSend,
@@ -117,14 +120,21 @@ export async function startHttpTransport(
         const toolIdentity = oauthIdentity(extra.authInfo, config);
         const toolUserKey = privateApp.userKeys.derive(toolIdentity);
         if (toolUserKey !== userKey) throw new Error("MCP identity changed during request");
-        return privateApp.sessions.issue(userKey, toolIdentity.expires_at);
+        return privateApp.sessions.issue(userKey, {
+          scopes: toolIdentity.scopes,
+          client_id: extra.authInfo?.clientId ?? "unknown",
+          oauth_expires_at_seconds: toolIdentity.expires_at,
+        });
       },
     } : localDemo ? {
       settingsApiUrl: `${config.server.public_base_url.replace(/\/$/, "")}/api`,
       widgetOrigin: config.app.widget_origin,
       localDemo: true,
       widgetHtml: () => mailbridgeWidgetHtml({ localDemo: true, safeSendDemo: localDemo.safeSend }),
-      issueSettingsSession: () => localDemo.sessions.issue(localDemo.userKey),
+      issueSettingsSession: () => localDemo.sessions.issue(localDemo.userKey, {
+        scopes: localDemo.config.auth.scopes,
+        client_id: "local-demo",
+      }),
     } : undefined;
     const mcp = createMailBridgeMcpServer(
       mcpService,
