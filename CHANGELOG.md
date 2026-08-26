@@ -9,6 +9,10 @@
 - added OAuth protected-resource metadata and token validation for remote use;
 - added opt-in Safe Send with drafts, policy validation, explicit confirmation,
   audit metadata, idempotency and fail-closed unknown-delivery handling;
+- hardened operator authentication with scrypt-based comparison and applied
+  standards-based rate limiting to authenticated browser and settings routes;
+- moved the runtime image to a digest-pinned minimal Chainguard base, verified
+  with zero High or Critical findings in the release container scan;
 - retained synthetic demos, CI, CodeQL, SBOM, checksums and release attestations;
 - added idempotent local setup, hardened Docker Compose and deployment runbooks.
 

@@ -55,7 +55,7 @@ jobs:
         shell: bash
         run: |
           for _ in {1..30}; do
-            if docker exec mailbridge-smoke node -e "fetch('http://127.0.0.1:3091/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+            if docker exec mailbridge-smoke /usr/bin/node -e "fetch('http://127.0.0.1:3091/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
               exit 0
             fi
             sleep 1
@@ -63,7 +63,7 @@ jobs:
           docker logs mailbridge-smoke
           exit 1
       - name: Run MCP smoke test
-        run: docker exec mailbridge-smoke node dist/demo/smoke.js
+        run: docker exec mailbridge-smoke /usr/bin/node dist/demo/smoke.js
       - name: Stop container
         if: always()
         run: docker rm --force mailbridge-smoke

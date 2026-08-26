@@ -13,7 +13,8 @@ Date: 2026-08-26
 | Safe Send synthetic smoke | PASS — 23 tools, 1 synthetic submission |
 | Direct-send default policy | BLOCKED as designed |
 | Fresh packed install and smoke | PASS |
-| Docker acceptance | PASS — UID 10001, read-only rootfs, no network, all capabilities dropped |
+| Docker acceptance | PASS — digest-pinned Chainguard runtime, UID 10001, read-only rootfs, no network, all capabilities dropped |
+| Container vulnerability scan | PASS — 0 High / 0 Critical |
 | Private identifier scan | PASS — 0 findings |
 | Real mailboxes or SMTP used | 0 |
 

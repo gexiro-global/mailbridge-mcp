@@ -1,11 +1,11 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Server } from "node:http";
 import express, { type NextFunction, type Request, type Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import { resolve } from "node:path";
 import { MailboxConfigSchema, type MailBridgeConfig, type MailboxConfig } from "../config/schema.js";
 import { FileSecretProvider } from "../config/secrets.js";
 import { brandConfigurationWarnings } from "../security/brandGuard.js";
-import { createRateLimiter } from "../security/rateLimit.js";
 import { logger } from "../util/logger.js";
 import { AdminAuditStore } from "./audit.js";
 import { AdminSessions, parseCookies } from "./auth.js";
@@ -54,7 +54,12 @@ export async function startAdminPanel(
   app.disable("x-powered-by");
   app.use(hostGuard(config.panel.allowed_hosts));
   app.use(panelSecurityHeaders);
-  app.use(createRateLimiter(config.panel.rate_limit.window_ms, config.panel.rate_limit.max_requests));
+  app.use(rateLimit({
+    windowMs: config.panel.rate_limit.window_ms,
+    limit: config.panel.rate_limit.max_requests,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  }));
   app.use(originGuard(config.panel.allowed_origins));
   app.use(express.urlencoded({ extended: false, limit: config.panel.request_max_bytes }));
 
@@ -67,7 +72,12 @@ export async function startAdminPanel(
   });
   app.post(
     "/admin/login",
-    createRateLimiter(config.panel.rate_limit.window_ms, config.panel.rate_limit.max_login_attempts),
+    rateLimit({
+      windowMs: config.panel.rate_limit.window_ms,
+      limit: config.panel.rate_limit.max_login_attempts,
+      standardHeaders: "draft-8",
+      legacyHeaders: false,
+    }),
     async (request, response) => {
       const cookies = parseCookies(request.header("cookie"));
       const csrf = bodyString(request, "csrf");
@@ -75,7 +85,7 @@ export async function startAdminPanel(
         response.status(403).type("html").send(errorPage(403, "CSRF validation failed."));
         return;
       }
-      const valid = sessions.verifyCredentials(bodyString(request, "username"), bodyString(request, "password"));
+      const valid = await sessions.verifyCredentials(bodyString(request, "username"), bodyString(request, "password"));
       await audit.append({ actor: valid ? config.panel.operator_username : "unknown", mailbox_id: null, action: "LOGIN", result: valid ? "PASS" : "FAIL" });
       if (!valid) {
         response.status(401).type("html").send(loginPage(csrf, true));

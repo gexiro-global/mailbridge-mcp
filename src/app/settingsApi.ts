@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import express, { type NextFunction, type Request, type Response, type Router } from "express";
+import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
-import { createRateLimiter } from "../security/rateLimit.js";
 import type { MailBridgeConfig } from "../config/schema.js";
 import type { MailboxConnectionTester } from "./connectionTest.js";
 import type { OneTimeSettingsSessions } from "./settingsSessions.js";
@@ -37,10 +37,12 @@ export function createSettingsRouter(deps: SettingsApiDependencies): Router {
   router.use((request, response, next) => settingsCors(request, response, next, origin, deps.localDemo === true));
   router.options("/{*path}", (_request, response) => response.status(204).end());
   router.use(express.json({ limit: "64kb", type: ["application/json", "application/*+json"] }));
-  router.use(createRateLimiter(
-    deps.config.app.settings_rate_limit.window_ms,
-    deps.config.app.settings_rate_limit.max_requests,
-  ));
+  router.use(rateLimit({
+    windowMs: deps.config.app.settings_rate_limit.window_ms,
+    limit: deps.config.app.settings_rate_limit.max_requests,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  }));
   router.use((request, response, next) => authorizeSettings(request, response as SettingsResponse, next, deps));
 
   router.get("/mailboxes", (_request, response: SettingsResponse) => {

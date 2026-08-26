@@ -30,7 +30,7 @@ describe("Apps SDK widget", () => {
     expect(html).toContain("DELETE ALL MAILBRIDGE DATA");
     expect(html).toContain("toolResponseMetadata");
     expect(html).toContain("X-MailBridge-CSRF");
-    const scripts = [...html.matchAll(/<script(?:\s+type="module")?>([\s\S]*?)<\/script>/g)];
+    const scripts = [...html.matchAll(/<script(?:\s+type="module")?>([\s\S]*?)<\/script>/gi)];
     expect(scripts.length).toBeGreaterThan(0);
     for (const script of scripts) expect(() => new Function(script[1] ?? "")).not.toThrow();
   });
@@ -49,7 +49,7 @@ describe("Apps SDK widget", () => {
     expect(html).not.toContain("sessionStorage");
     expect(html).not.toMatch(/\bconfirm\s*\(/);
     expect(html).not.toMatch(/\bprompt\s*\(/);
-    const scripts = [...html.matchAll(/<script(?:\s+type="module")?>([\s\S]*?)<\/script>/g)];
+    const scripts = [...html.matchAll(/<script(?:\s+type="module")?>([\s\S]*?)<\/script>/gi)];
     expect(scripts).toHaveLength(1);
     expect(() => new Function(scripts[0]?.[1] ?? "")).not.toThrow();
   });
