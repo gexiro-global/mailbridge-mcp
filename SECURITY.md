@@ -2,31 +2,34 @@
 
 ## Supported version
 
-The latest release and the current `main` branch are supported.
+The latest release and current `main` branch are supported.
 
 ## Reporting
 
-Please use GitHub private vulnerability reporting for this repository. Do not
-open a public issue containing a credential, token, private key, real email,
-mailbox address, production hostname, or unredacted log.
+Use GitHub private vulnerability reporting. Never open a public issue containing
+credentials, tokens, private keys, real email content, mailbox addresses,
+production hostnames or unredacted logs.
 
-## Public reference scope
+## Security invariants
 
-This distribution is synthetic-only. It must not accept real mailbox
-credentials and must not be represented as a production email connector.
+- IMAP reads use `EXAMINE` and `BODY.PEEK`; no read tool changes flags.
+- Credentials are encrypted with AES-256-GCM using a key outside SQLite.
+- OAuth identities are pseudonymized and data is scoped per `(issuer, subject)`.
+- Returned email and attachment content is labeled untrusted and bounded.
+- Remote production fails closed without HTTPS, validated OAuth and an explicit
+  subject allowlist.
+- Sending is absent unless `MAILBRIDGE_ALLOW_SEND=true`; every mailbox also has
+  a separate disabled/draft-only/direct policy.
+- Draft-only sending requires an exact draft version and a short-lived one-time
+  confirmation. Unknown SMTP outcomes are never retried automatically.
+- The emergency admin panel is disabled by default and may bind only to loopback.
 
-Security invariants:
+Release archives include SHA-256 checksums, a CycloneDX SBOM and GitHub
+provenance attestations. See [THREAT_MODEL.md](THREAT_MODEL.md).
 
-- no SMTP or mailbox write operations;
-- no credential-bearing tool inputs;
-- bounded message and attachment output;
-- untrusted-content labeling;
-- loopback-only binding by default;
-- no production configuration or endpoints in the repository.
+## Operator responsibilities
 
-Release archives include SHA-256 checksums, a CycloneDX SBOM, and GitHub
-artifact provenance attestations. See [THREAT_MODEL.md](THREAT_MODEL.md) for
-assets, trust boundaries, controls, and mandatory security-review triggers.
-
-If a future contribution introduces real authentication, IMAP, persistence, or
-public hosting, it requires a separate threat model and maintainer approval.
+Protect the database and all active application-key versions, use an egress
+allowlist, redact reverse-proxy logs, patch dependencies, test restores and
+rotate provider credentials after suspected exposure. MailBridge is not an
+authorization server and does not make an unsafe IdP configuration safe.

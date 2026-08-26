@@ -1,0 +1,43 @@
+services:
+  mailbridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mailbridge-mcp:local
+    container_name: mailbridge-mcp
+    restart: unless-stopped
+    user: "10001:10001"
+    read_only: true
+    init: true
+    ports:
+      - "127.0.0.1:3091:3091"
+    environment:
+      NODE_ENV: production
+      MAILBRIDGE_CONFIG: /app/config/mailboxes.yaml
+      MAILBRIDGE_SECRET_DIR: /run/secrets/mailbridge
+      MAILBRIDGE_ID_KEY_FILE: mailbridge_id_hmac_key
+      MAILBRIDGE_LOG_LEVEL: info
+      MAILBRIDGE_ALLOW_SEND: "false"
+    volumes:
+      - ./config/mailboxes.yaml:/app/config/mailboxes.yaml:ro
+      - ./secrets:/run/secrets/mailbridge:ro
+      - mailbridge_data:/app/runtime/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    networks:
+      - mailbridge_private
+
+networks:
+  mailbridge_private:
+    name: mailbridge_private
+    driver: bridge
+
+volumes:
+  mailbridge_data:

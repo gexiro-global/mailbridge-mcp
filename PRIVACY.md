@@ -1,15 +1,19 @@
 # Privacy
 
-The default MailBridge MCP Community distribution processes only synthetic
-records committed to this repository. It does not connect to a mailbox, request
-credentials, use analytics, set cookies, or persist user content.
+MailBridge is self-hosted. The project maintainers do not receive mailbox data,
+credentials, prompts or telemetry from a user's deployment.
 
-When run locally, the server handles MCP requests in memory and sets
-`Cache-Control: no-store`. It does not implement a telemetry exporter or a
-database. Operators remain responsible for the privacy notice, access controls,
-retention policy, and legal basis of any independently modified or hosted
-deployment.
+The connector processes mailbox configuration, encrypted credentials, message
+metadata and content requested by the user, encrypted drafts, Safe Send state
+and redacted audit metadata. Data remains in the operator-controlled SQLite
+database and is sent to the connected MCP client only when a tool call requires
+it. MailBridge sets `Cache-Control: no-store` and provides no analytics exporter.
 
-Do not submit real email, mailbox addresses, credentials, tokens, or production
-logs in public issues. Use GitHub private vulnerability reporting for security
-reports.
+Passwords are accepted only by the Settings API, encrypted before storage and
+never returned. Replacing credentials overwrites the stored envelope; deleting
+an account deletes its associated connector records according to the local
+deployment's retention policy.
+
+Operators are responsible for legal basis, user notices, access control,
+retention, backups, deletion requests and any third-party OAuth/hosting logs.
+Do not put real mail or secrets in public issues.

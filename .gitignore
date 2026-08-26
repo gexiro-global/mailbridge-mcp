@@ -6,6 +6,9 @@ dist/
 !.env.example
 coverage/
 runtime/
+config/mailboxes.yaml
+secrets/*
+!secrets/README.md
 *.log
 *.sqlite
 *.sqlite-wal

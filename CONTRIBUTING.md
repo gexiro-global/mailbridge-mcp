@@ -1,13 +1,13 @@
 # Contributing
 
-Contributions are welcome when they preserve the public reference scope and
-read-only security model.
+Contributions are welcome when they preserve tenant isolation, read-only IMAP
+semantics and fail-closed Safe Send policy.
 
-1. Create a focused branch and keep commits small.
-2. Never use real mailbox data in fixtures, issues, screenshots, or tests.
-3. Run `npm run check` before opening a pull request.
-4. Document any tool-schema or resource-URI change.
-5. Do not add SMTP, credential inputs, mailbox mutation, telemetry, or external
-   resource domains without prior maintainer approval and a threat-model update.
+1. Use only reserved `.invalid` mailbox data in fixtures and reports.
+2. Run `npm run check` and the relevant synthetic smoke test.
+3. Document every tool schema, annotation, scope or resource URI change.
+4. Add negative tests for authentication, data isolation and send gates.
+5. Never add credentials, production endpoints, telemetry or external widget
+   domains without maintainer review and a threat-model update.
 
 Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).

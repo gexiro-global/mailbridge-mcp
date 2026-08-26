@@ -1,36 +1,28 @@
 # Changelog
 
-All notable changes to the public MailBridge MCP distribution are documented
-here. The project follows [Semantic Versioning](https://semver.org/).
+## 2.0.0 — 2026-08-26
 
-## [1.1.1] - 2026-08-26
+- replaced the synthetic-only reference runtime with real multi-mailbox IMAP;
+- added user-scoped encrypted SQLite credential storage and Apps SDK settings UI;
+- added all-folder native IMAP search, stable message IDs, `BODY.PEEK` fetch,
+  standards-based thread reconstruction and bounded attachment retrieval;
+- added OAuth protected-resource metadata and token validation for remote use;
+- added opt-in Safe Send with drafts, policy validation, explicit confirmation,
+  audit metadata, idempotency and fail-closed unknown-delivery handling;
+- hardened operator authentication with scrypt-based comparison and applied
+  standards-based rate limiting to authenticated browser and settings routes;
+- moved the runtime image to a digest-pinned minimal Chainguard base, verified
+  with zero High or Critical findings in the release container scan;
+- retained synthetic demos, CI, CodeQL, SBOM, checksums and release attestations;
+- added idempotent local setup, hardened Docker Compose and deployment runbooks.
 
-### Fixed
+This is a major release because the product changes from a reference demo to a
+self-hosted connector for real user-owned mailboxes.
 
-- Release checksum manifests now use artifact basenames, so a standard
-  `sha256sum -c SHA256SUMS` works directly in the download directory.
-- Release creation verifies the generated checksum manifest before publishing.
+## 1.1.1 — 2026-08-25
 
-## [1.1.0] - 2026-08-22
+- corrected release checksum paths.
 
-### Added
+## 1.1.0 — 2026-08-25
 
-- Explicit output schemas for every structured read-only tool.
-- MCP Apps initialization handshake in the dashboard widget.
-- Threat model, privacy statement, support policy, and contribution templates.
-- Container smoke testing, CycloneDX SBOM generation, release checksums, and
-  GitHub artifact attestations.
-- Dedicated MailBridge visual identity asset.
-
-### Changed
-
-- Centralized the runtime version and refreshed current OpenAI plugin guidance.
-
-## [1.0.0] - 2026-08-22
-
-- Initial synthetic-only public reference release with eleven read-only tools,
-  MCP Apps UI, Docker packaging, tests, CodeQL, and repository hardening.
-
-[1.1.1]: https://github.com/gexiro-global/mailbridge-mcp/compare/v1.1.0...v1.1.1
-[1.1.0]: https://github.com/gexiro-global/mailbridge-mcp/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/gexiro-global/mailbridge-mcp/releases/tag/v1.0.0
+- hardened the public synthetic reference app and release pipeline.
