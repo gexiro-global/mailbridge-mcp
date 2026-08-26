@@ -50,7 +50,7 @@ jobs:
           --user 10001:10001
           --env NODE_ENV=development
           mailbridge-mcp:${{ github.sha }}
-          node dist/demo/startLocalDemo.js
+          dist/demo/startLocalDemo.js
       - name: Wait for health
         shell: bash
         run: |
