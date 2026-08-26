@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.2 — 2026-08-26
+
+- hardened error logging so credential-bearing provider and transport failures
+  are reduced to allowlisted metadata rather than serialized into application
+  logs;
+- added regression coverage that keeps runtime failure boundaries on fixed,
+  allowlisted error categories;
+- closed the post-2.0.1 CodeQL sensitive-data logging alert without expanding
+  the product surface or changing the self-hosted deployment contract. See the
+  [2.0.2 candidate verification](docs/RELEASE_VERIFICATION_2.0.2.md).
+
 ## 2.0.1 — 2026-08-26
 
 - separated loopback development setup from an explicit, fail-closed production
