@@ -140,9 +140,15 @@ Official references:
 
 ## Release integrity
 
-Each tagged release is built from locked dependencies in GitHub Actions. Verify
-the downloaded archive and SBOM with the included `SHA256SUMS`, then verify the
-GitHub artifact attestation against this repository before use.
+Each tagged release is built from locked dependencies in GitHub Actions. Place
+the downloaded archive, SBOM, and `SHA256SUMS` in the same directory, then run:
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
+After the checksums pass, verify the GitHub artifact attestation against this
+repository before use.
 
 ## Project policies
 
