@@ -234,7 +234,7 @@ export function createMailBridgeMcpServer(
       csp: { connectDomains: [] as string[], resourceDomains: [] as string[] },
     };
     server.registerResource(
-      "mailbridge-safe-send-v2.0.1",
+      "mailbridge-safe-send-v2.0.2",
       MAILBRIDGE_SAFE_SEND_WIDGET_URI,
       {
         title: "MailBridge Safe Send",

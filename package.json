@@ -1,6 +1,6 @@
 {
   "name": "@gexiro/mailbridge-mcp",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Self-hosted multi-mailbox ChatGPT App with read-only IMAP intelligence and opt-in Safe Send.",
   "type": "module",
   "license": "Apache-2.0",

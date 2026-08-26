@@ -61,8 +61,8 @@ Domain comparison uses canonical ASCII DNS names and exact domain matching.
 
 ## Apps SDK surface
 
-The Safe Send preview is a separate MCP Apps resource. Version 2.0.1 registers
-`ui://mailbridge/safe-send-v2.0.1.html`. Clients should use the
+The Safe Send preview is a separate MCP Apps resource. Version 2.0.2 registers
+`ui://mailbridge/safe-send-v2.0.2.html`. Clients should use the
 `ui.resourceUri` supplied by tool metadata rather than hard-code that URI across
 future releases.
 

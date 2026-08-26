@@ -1,6 +1,6 @@
 server:
   name: mailbridge-mcp
-  version: 2.0.1
+  version: 2.0.2
   bind_host: 127.0.0.1
   port: 3091
   public_base_url: https://mailbridge.example.invalid

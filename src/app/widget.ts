@@ -1,4 +1,4 @@
-export const MAILBRIDGE_WIDGET_URI = "ui://mailbridge/manage-mailboxes-v2.0.1.html";
+export const MAILBRIDGE_WIDGET_URI = "ui://mailbridge/manage-mailboxes-v2.0.2.html";
 
 export interface MailBridgeWidgetRenderOptions {
   localDemo?: boolean;

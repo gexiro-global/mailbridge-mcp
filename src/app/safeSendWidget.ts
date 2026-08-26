@@ -1,4 +1,4 @@
-export const MAILBRIDGE_SAFE_SEND_WIDGET_URI = "ui://mailbridge/safe-send-v2.0.1.html";
+export const MAILBRIDGE_SAFE_SEND_WIDGET_URI = "ui://mailbridge/safe-send-v2.0.2.html";
 
 export function mailbridgeSafeSendWidgetHtml(): string {
   return `<!doctype html>
