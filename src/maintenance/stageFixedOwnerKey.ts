@@ -53,8 +53,8 @@ if (isMain) {
     .then((status) => {
       process.stdout.write(`${JSON.stringify({ fixed_owner_key_staged: true, status, secret_value_exposed: false })}\n`);
     })
-    .catch((error: unknown) => {
-      process.stderr.write(`${JSON.stringify({ fixed_owner_key_staged: false, error_category: error instanceof Error ? error.message : "UNKNOWN" })}\n`);
+    .catch(() => {
+      process.stderr.write(`${JSON.stringify({ fixed_owner_key_staged: false, error_category: "STAGE_FIXED_OWNER_KEY_FAILED" })}\n`);
       process.exitCode = 1;
     });
 }
