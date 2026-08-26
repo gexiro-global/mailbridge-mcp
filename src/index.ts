@@ -50,7 +50,7 @@ function option(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-main().catch((error: unknown) => {
-  logger.fatal({ error_category: error instanceof Error ? error.name : "UnknownError" }, "startup_failed");
+main().catch(() => {
+  logger.fatal({ error_category: "STARTUP_FAILED" }, "startup_failed");
   process.exitCode = 1;
 });

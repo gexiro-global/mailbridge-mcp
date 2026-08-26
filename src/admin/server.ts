@@ -168,8 +168,8 @@ export async function startAdminPanel(
     response.redirect(303, "/admin/login");
   });
   app.use((_request, response) => response.status(404).type("html").send(errorPage(404, "Not found.")));
-  app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
-    logger.warn({ error_category: error instanceof Error ? error.name : "UnknownError" }, "admin_request_failed");
+  app.use((_error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+    logger.warn({ error_category: "REQUEST_FAILED" }, "admin_request_failed");
     if (!response.headersSent) response.status(400).type("html").send(errorPage(400, "Request could not be processed."));
   });
 

@@ -72,8 +72,8 @@ program.command("doctor").description("check config and required secret-file pre
   if (checks.some((check) => !check.present)) process.exitCode = 2;
 });
 
-program.parseAsync().catch((error: unknown) => {
-  output({ error: error instanceof Error ? error.message : "CLI operation failed" });
+program.parseAsync().catch(() => {
+  output({ error: "CLI_OPERATION_FAILED" });
   process.exitCode = 1;
 });
 

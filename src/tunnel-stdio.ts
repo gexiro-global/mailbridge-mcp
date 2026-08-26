@@ -47,7 +47,7 @@ async function main(): Promise<void> {
   await server.connect(transport);
 }
 
-main().catch((error) => {
-  logger.fatal({ error_category: error instanceof Error ? error.name : "UnknownError" }, "tunnel_stdio_startup_failed");
+main().catch(() => {
+  logger.fatal({ error_category: "STARTUP_FAILED" }, "tunnel_stdio_startup_failed");
   process.exitCode = 1;
 });
