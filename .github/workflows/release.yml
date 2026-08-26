@@ -34,7 +34,11 @@ jobs:
           package_file="$(npm pack --ignore-scripts --silent)"
           mv "$package_file" "release/mailbridge-mcp-${GITHUB_REF_NAME}.tgz"
           npm sbom --sbom-format cyclonedx > release/mailbridge-sbom.cdx.json
-          sha256sum "release/mailbridge-mcp-${GITHUB_REF_NAME}.tgz" release/mailbridge-sbom.cdx.json > release/SHA256SUMS
+          (
+            cd release
+            sha256sum "mailbridge-mcp-${GITHUB_REF_NAME}.tgz" mailbridge-sbom.cdx.json > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
       - name: Attest release provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
