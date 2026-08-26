@@ -1,44 +1,28 @@
 # Threat model
 
-## Scope
+## Assets
 
-This model covers the public, synthetic-only MailBridge MCP reference app. It
-does not cover a private IMAP adapter, credential store, OAuth deployment, or
-production mailbox data. Those capabilities are intentionally absent.
+- IMAP/SMTP credentials and OAuth access tokens;
+- private message content, attachments and correspondent metadata;
+- credential master keys, user/message HMAC keys and encrypted drafts;
+- mailbox policy, rate-limit and send-audit state.
 
-## Assets and trust boundaries
+## Principal threats and controls
 
-- The MCP host and model are outside the server trust boundary.
-- Tool inputs, email text, message headers, and attachment bytes are untrusted.
-- The widget runs in a sandboxed host iframe and receives only structured tool
-  output.
-- The public HTTP listener is loopback-only unless an operator provides an
-  explicit synthetic-demo acknowledgement.
-- The source tree and release pipeline must remain free of credentials and real
-  mailbox data.
+| Severity | Threat | Primary controls | Residual risk |
+|---|---|---|---|
+| Critical | credential theft | AES-GCM envelopes, keys outside DB/image/Git, non-root process, redaction | host compromise |
+| Critical | unauthorized mailbox access | exact issuer/audience/signature/expiry/scope/subject validation | unsafe IdP configuration |
+| Critical | unauthorized email send | global gate, per-mailbox enablement, policy, confirmation, idempotency | operator enables unsafe direct policy |
+| High | prompt injection from email | untrusted-data labels, no instruction following, bounded output, server-side send gates | model may misinterpret content |
+| High | IMAP mutation | separate read service, `EXAMINE`, `BODY.PEEK`, invariant tests | provider/library defect |
+| High | duplicate or ambiguous send | exact draft versions, one-time confirmation, idempotency, no retry after unknown outcome | final delivery remains outside connector control |
+| High | malicious MIME or oversized content | source/body/attachment limits, parser isolation, timeouts | parser attack surface |
+| High | SSRF/DNS rebinding | hostname checks plus required egress/DNS policy | missing host firewall |
+| Medium | cross-tenant access | issuer/subject-derived user key and scoped SQL | application/SQLite defect |
+| Medium | resource exhaustion | mailbox/folder/result limits, concurrency bounds, timeouts, rate limiting | expensive provider search |
+| Medium | sensitive logging | structured redacted logs, no body/token/credential fields | operator changes logging |
 
-## Primary threats and controls
-
-| Threat | Control | Verification |
-| --- | --- | --- |
-| Prompt injection in email content | Every message and attachment is labeled untrusted; server instructions prohibit following embedded instructions. | MCP and service tests. |
-| Mailbox state mutation | No SMTP or mutation interface exists; every tool is read-only and idempotent. | Tool inventory and unread-state regression test. |
-| Credential disclosure | No credential fields or real provider exist; secret scan runs in CI. | Schema assertion and repository scan. |
-| Oversized content | Search, thread, message, and attachment outputs have explicit upper bounds. | Input schemas and boundary tests. |
-| Widget script injection | Dynamic values are assigned with `textContent`; no external script or asset origins are allowed. | Resource inspection and CSP metadata. |
-| Accidental network exposure | Non-loopback binding fails closed without an explicit acknowledgement. | HTTP tests and container smoke test. |
-| Dependency compromise | Lockfile installs, dependency review, CodeQL, npm audit, SBOM, immutable action pins, and artifact attestation. | GitHub workflows and release evidence. |
-| Private implementation leakage | Public history is independent and contains synthetic data only. | Identifier scan and anonymous-clone verification. |
-
-## Explicit non-goals
-
-- Authenticating users or connecting real mailboxes.
-- Persisting messages, credentials, tokens, or sessions.
-- Sending, moving, deleting, copying, appending, or flagging email.
-- Treating the synthetic reference app as a hosted production connector.
-
-## Security review triggers
-
-A new threat-model review is mandatory before adding real IMAP, OAuth,
-credentials, persistence, public hosting, external widget origins, or any tool
-that can change state.
+All MCP arguments, OAuth tokens, Host/Origin headers, provider responses, MIME,
+HTML, filenames and YAML configuration are untrusted input. Email content is data,
+never server instruction.

@@ -1,0 +1,102 @@
+server:
+  name: mailbridge-mcp
+  version: 2.0.0
+  bind_host: 127.0.0.1
+  port: 3091
+  public_base_url: https://mailbridge.example.invalid
+  allowed_hosts:
+    - 127.0.0.1
+    - localhost
+  allowed_origins:
+    - https://chatgpt.com
+  request_max_bytes: 1048576
+  rate_limit:
+    window_ms: 60000
+    max_requests: 60
+
+auth:
+  # disabled_dev is accepted only on loopback outside production.
+  mode: disabled_dev
+  issuer: https://identity.example.invalid/
+  audience: https://mailbridge.example.invalid
+  jwks_uri: https://identity.example.invalid/.well-known/jwks.json
+  scopes:
+    - mail.read
+    - mail.health.read
+    - mail.send
+  allowed_subjects: []
+
+privacy:
+  snippet_max_chars: 320
+  body_max_chars: 20000
+  source_max_bytes: 5242880
+  audit_retention_days: 30
+
+app:
+  # ChatGPT Apps SDK mode. Mailboxes created in the widget are loaded
+  # from user-scoped server storage; the static list below is ignored by it.
+  enabled: true
+  database_path: ./runtime/data/mailbridge.sqlite
+  widget_origin: https://web-sandbox.oaiusercontent.com
+  credential_master_key_secret: mailbridge_credential_master_key
+  credential_key_version: v1
+  # oauth_subject is appropriate for a new multi-user deployment.
+  # fixed_private_owner preserves an existing single-operator user_key during
+  # OAuth/HTTPS cutover and requires exactly one auth.allowed_subjects entry.
+  user_key_mode: oauth_subject
+  user_key_hmac_secret: mailbridge_user_key_hmac
+  fixed_owner_user_key_secret: mailbridge_fixed_owner_user_key
+  message_id_hmac_secret: mailbridge_id_hmac_key
+  settings_session_ttl_ms: 300000
+  max_mailboxes_per_user: 50
+  settings_rate_limit:
+    window_ms: 60000
+    max_requests: 60
+
+panel:
+  # The panel is a separate, loopback-only operator process. Keep disabled until
+  # its password/session-key secret files and private HTTPS access path exist.
+  enabled: false
+  bind_host: 127.0.0.1
+  port: 8792
+  allowed_hosts:
+    - 127.0.0.1
+    - localhost
+  allowed_origins:
+    - https://127.0.0.1:8792
+    - https://localhost:8792
+  operator_username: operator
+  password_secret: panel_operator_password
+  session_key_secret: panel_session_hmac_key
+  session_timeout_ms: 1800000
+  secure_cookie: true
+  request_max_bytes: 65536
+  audit_log_path: ./data/admin-audit.jsonl
+  rate_limit:
+    window_ms: 60000
+    max_requests: 60
+    max_login_attempts: 5
+
+mailboxes: # Legacy stdio/dev sample only; ignored by Apps SDK HTTP mode.
+  - id: brand_a_primary
+    display_name: Brand A — Primary
+    email: operator@brand-a.example.invalid
+    brand: BRAND_A
+    purpose: Test-only example mailbox
+    imap_host: mail.example.invalid
+    imap_port: 993
+    tls: true
+    username_secret: brand_a_primary_username
+    password_secret: brand_a_primary_password
+    enabled: false
+    allowed_folders:
+      - INBOX
+    result_limit: 50
+    tags:
+      - example
+    brand_hints:
+      organisation_names:
+        - BRAND_A
+      domains:
+        - brand-a.example.invalid
+      private: false

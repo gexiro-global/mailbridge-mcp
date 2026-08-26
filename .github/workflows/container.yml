@@ -40,16 +40,22 @@ jobs:
             image --input /image.tar --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --quiet
       - name: Start synthetic container
         run: >-
-          docker run --detach --name mailbridge-smoke --publish 3100:3100
-          --env MAILBRIDGE_HOST=0.0.0.0
-          --env MAILBRIDGE_PUBLIC_BASE_URL=http://127.0.0.1:3100
-          --env MAILBRIDGE_ALLOW_PUBLIC_DEMO=I_UNDERSTAND_SYNTHETIC_ONLY
+          docker run --detach --name mailbridge-smoke
+          --network none
+          --read-only
+          --tmpfs /app/runtime:rw,noexec,nosuid,size=64m,uid=10001,gid=10001,mode=0700
+          --tmpfs /tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001,mode=0700
+          --cap-drop ALL
+          --security-opt no-new-privileges:true
+          --user 10001:10001
+          --env NODE_ENV=development
           mailbridge-mcp:${{ github.sha }}
+          node dist/demo/startLocalDemo.js
       - name: Wait for health
         shell: bash
         run: |
           for _ in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:3100/health >/dev/null; then
+            if docker exec mailbridge-smoke node -e "fetch('http://127.0.0.1:3091/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
               exit 0
             fi
             sleep 1
@@ -57,7 +63,7 @@ jobs:
           docker logs mailbridge-smoke
           exit 1
       - name: Run MCP smoke test
-        run: npm run smoke
+        run: docker exec mailbridge-smoke node dist/demo/smoke.js
       - name: Stop container
         if: always()
         run: docker rm --force mailbridge-smoke
