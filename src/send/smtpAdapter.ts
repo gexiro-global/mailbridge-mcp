@@ -3,6 +3,7 @@ import type { MailboxConfig } from "../config/schema.js";
 import { MailBridgeError } from "../domain/errors.js";
 import type { SecretReader } from "../imap/factory.js";
 import type { DraftPayload, SendReceipt } from "../app/types.js";
+import { resolvePublicEndpoint } from "../security/networkPolicy.js";
 
 export interface MailTransport {
   send(mailbox: MailboxConfig, payload: DraftPayload, messageId: string): Promise<SendReceipt>;
@@ -20,13 +21,14 @@ export class SmtpMailTransport implements MailTransport {
       this.secrets.read(mailbox.password_secret),
     ]);
     const secure = mailbox.smtp_tls_mode === "implicit";
+    const endpoint = await resolvePublicEndpoint(mailbox.smtp_host);
     const transport = nodemailer.createTransport({
-      host: mailbox.smtp_host,
+      host: endpoint.address,
       port: mailbox.smtp_port,
       secure,
       requireTLS: !secure,
       auth: { user: username, pass: password },
-      tls: { rejectUnauthorized: true, servername: mailbox.smtp_host, minVersion: "TLSv1.2" },
+      tls: { rejectUnauthorized: true, servername: endpoint.hostname, minVersion: "TLSv1.2" },
       connectionTimeout: 15_000,
       greetingTimeout: 15_000,
       socketTimeout: 30_000,

@@ -20,8 +20,14 @@ import {
 const mailboxId = z.string().min(5).max(64).regex(/^mbx_[a-z0-9_]+$/);
 const enabledSchema = z.object({}).strict();
 const deleteAllSchema = z.object({ confirmation: z.literal("DELETE ALL MAILBRIDGE DATA") }).strict();
+const deleteMailboxSchema = z.object({ confirmation: z.string().min(5).max(64) }).strict();
 
-type SettingsResponse = Response<unknown, { user_key: string; session_expires_at_ms: number }>;
+type SettingsResponse = Response<unknown, {
+  user_key: string;
+  session_expires_at_ms: number;
+  scopes: string[];
+  client_id: string;
+}>;
 
 export interface SettingsApiDependencies {
   config: MailBridgeConfig;
@@ -163,6 +169,8 @@ export function createSettingsRouter(deps: SettingsApiDependencies): Router {
   router.delete("/mailboxes/:mailboxId", (request, response: SettingsResponse, next) => {
     try {
       const id = mailboxId.parse(request.params.mailboxId);
+      const confirmation = deleteMailboxSchema.parse(request.body);
+      if (confirmation.confirmation !== id) throw new Error("Mailbox deletion confirmation did not match");
       deps.store.deleteMailbox(response.locals.user_key, id);
       response.status(204).end();
     } catch (error) {
@@ -203,9 +211,16 @@ function authorizeSettings(
   try {
     if (!match?.[1]) throw new Error("Missing settings authorization");
     const consumed = deps.sessions.consume(match[1], csrf);
-    const rotated = deps.sessions.issue(consumed.user_key, Math.floor(consumed.expires_at_ms / 1000));
+    if (!consumed.scopes.includes("mail.settings.write")) throw new Error("Mailbox settings scope is required");
+    const rotated = deps.sessions.issue(consumed.user_key, {
+      scopes: consumed.scopes,
+      client_id: consumed.client_id,
+      oauth_expires_at_seconds: Math.floor(consumed.expires_at_ms / 1000),
+    });
     response.locals.user_key = consumed.user_key;
     response.locals.session_expires_at_ms = consumed.expires_at_ms;
+    response.locals.scopes = consumed.scopes;
+    response.locals.client_id = consumed.client_id;
     response.setHeader("Access-Control-Expose-Headers", "X-MailBridge-Settings-Token, X-MailBridge-Settings-CSRF, X-MailBridge-Settings-Expires");
     response.setHeader("X-MailBridge-Settings-Token", rotated.token);
     response.setHeader("X-MailBridge-Settings-CSRF", rotated.csrf);

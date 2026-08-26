@@ -19,6 +19,7 @@ const expectedTools = [
   "list_send_audit",
   "mailbox_health",
   "open_mail_composer",
+  "open_mailbox_settings",
   "prepare_draft_send",
   "reply_draft",
   "reply_email",
@@ -46,13 +47,13 @@ async function main(): Promise<void> {
   });
   assert(widgetPage.includes("LOCAL SAFE SEND STAGING — SYNTHETIC TRANSPORT — NO REAL EMAIL"), "safe staging warning is missing");
 
-  const client = new Client({ name: "mailbridge-v04-safe-send-smoke", version: "1.0.0" }, { capabilities: {} });
+  const client = new Client({ name: "mailbridge-v2-safe-send-smoke", version: "2.0.1" }, { capabilities: {} });
   const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`));
   await client.connect(transport);
   try {
     const discovered = await client.listTools();
     const names = discovered.tools.map((tool) => tool.name).sort();
-    assert(JSON.stringify(names) === JSON.stringify(expectedTools), `unexpected v0.4 tools: ${names.join(", ")}`);
+    assert(JSON.stringify(names) === JSON.stringify(expectedTools), `unexpected Safe Send tools: ${names.join(", ")}`);
     const sendDraft = discovered.tools.find((tool) => tool.name === "send_draft");
     assert(sendDraft?.annotations?.destructiveHint === true && sendDraft.annotations.idempotentHint === true,
       "send_draft annotations are unsafe");
@@ -72,7 +73,7 @@ async function main(): Promise<void> {
     const created = structured(await call(client, "create_draft", {
       mailbox_id: mailboxId,
       to: ["recipient@external.synthetic.invalid"],
-      subject: "MailBridge v0.4 synthetic staging acceptance",
+      subject: "MailBridge v2.0.1 synthetic Safe Send acceptance",
       text_body: "This is a synthetic transport test. No real email is sent.",
     }));
     const draft = record(created.draft, "create_draft returned no draft");

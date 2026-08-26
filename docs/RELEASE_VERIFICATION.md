@@ -2,6 +2,10 @@
 
 Date: 2026-08-26
 
+This is a point-in-time record for the 2.0.0 release artifacts. It does not
+automatically cover later commits or the `2.0.1 — Unreleased` changelog section;
+those changes require a fresh clean-checkout and delivered-artifact verification.
+
 | Gate | Result |
 |---|---|
 | TypeScript typecheck | PASS |

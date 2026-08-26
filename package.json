@@ -1,6 +1,6 @@
 {
   "name": "@gexiro/mailbridge-mcp",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Self-hosted multi-mailbox ChatGPT App with read-only IMAP intelligence and opt-in Safe Send.",
   "type": "module",
   "license": "Apache-2.0",
@@ -30,9 +30,11 @@
   "files": [
     "dist",
     "config/mailboxes.example.yaml",
+    "config/mailboxes.production.example.yaml",
     "secrets/README.md",
     "docs",
     "scripts/setup.mjs",
+    "scripts/provision-container-secrets.mjs",
     "Dockerfile",
     "docker-compose.yml",
     "README.md",
@@ -41,6 +43,7 @@
     "ARCHITECTURE.md",
     "THREAT_MODEL.md",
     "SUPPORT.md",
+    "TERMS.md",
     "CHANGELOG.md",
     "LICENSE",
     "NOTICE"
@@ -60,6 +63,9 @@
     "start:stdio": "node dist/index.js --transport stdio",
     "start:tunnel-stdio": "node dist/tunnel-stdio.js",
     "setup": "node scripts/setup.mjs",
+    "setup:production": "node scripts/setup.mjs --production",
+    "doctor": "node dist/cli.js doctor",
+    "doctor:production": "node dist/cli.js --config ./config/mailboxes.production.yaml --environment production doctor",
     "configure:send": "node dist/maintenance/configureMailboxSend.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
@@ -70,27 +76,27 @@
     "check": "npm run typecheck && npm run build && npm test && npm run secret-scan"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "commander": "15.0.0",
     "express": "5.2.1",
     "express-rate-limit": "8.6.2",
     "imapflow": "1.4.7",
-    "jose": "6.2.3",
+    "jose": "6.2.10",
     "mailparser": "3.9.16",
     "nodemailer": "9.0.5",
     "pino": "10.3.1",
-    "sanitize-html": "2.17.6",
+    "sanitize-html": "2.17.7",
     "yaml": "2.9.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/express": "5.0.6",
     "@types/mailparser": "3.4.6",
-    "@types/node": "26.1.1",
+    "@types/node": "26.3.0",
     "@types/nodemailer": "8.0.1",
     "@types/sanitize-html": "2.16.1",
-    "tsx": "4.23.1",
+    "tsx": "4.23.12",
     "typescript": "7.0.2",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }

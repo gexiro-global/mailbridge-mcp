@@ -1,4 +1,4 @@
-export const MAILBRIDGE_WIDGET_URI = "ui://mailbridge/manage-mailboxes.html";
+export const MAILBRIDGE_WIDGET_URI = "ui://mailbridge/manage-mailboxes-v2.0.1.html";
 
 export interface MailBridgeWidgetRenderOptions {
   localDemo?: boolean;
@@ -12,11 +12,11 @@ export interface MailBridgeWidgetRenderOptions {
 
 export function mailbridgeReadOnlyWidgetHtml(): string {
   return `<!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>MailBridge — skrzynki</title>
+  <title>MailBridge — mailboxes</title>
   <style>
     :root{color-scheme:light dark;font:14px/1.45 ui-sans-serif,system-ui,sans-serif;--line:color-mix(in srgb,currentColor 18%,transparent);--muted:color-mix(in srgb,currentColor 62%,transparent)}
     *{box-sizing:border-box}body{margin:0;background:transparent;color:CanvasText}main{max-width:920px;margin:auto;padding:18px}h1{font-size:20px;margin:0}.notice{padding:10px 12px;border:1px solid var(--line);border-radius:10px;color:var(--muted);margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}.card{border:1px solid var(--line);border-radius:14px;padding:14px;background:Canvas}.card h2{font-size:16px;margin:0 0 6px}.meta{color:var(--muted);overflow-wrap:anywhere}.status{display:inline-flex;margin-top:9px;padding:3px 8px;border:1px solid var(--line);border-radius:999px}
@@ -35,7 +35,7 @@ const message=document.querySelector("#message");
 function render(data){
   const mailboxes=Array.isArray(data?.mailboxes)?data.mailboxes:[];
   list.replaceChildren();
-  if(!mailboxes.length){message.textContent="Brak danych skrzynek.";return}
+  if(!mailboxes.length){message.textContent="No mailbox data is available.";return}
   message.textContent="Mailboxes: "+mailboxes.length;
   for(const box of mailboxes){
     const card=document.createElement("article");card.className="card";
@@ -77,11 +77,11 @@ export function mailbridgeWidgetHtml(options: MailBridgeWidgetRenderOptions = {}
     })}};</script>`
     : "";
   return `<!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>MailBridge — ustawienia skrzynek</title>
+  <title>MailBridge — mailbox settings</title>
   <style>
     :root{color-scheme:light dark;font:14px/1.45 ui-sans-serif,system-ui,sans-serif;--accent:#6d5efc;--line:color-mix(in srgb,currentColor 18%,transparent);--muted:color-mix(in srgb,currentColor 62%,transparent)}
     *{box-sizing:border-box}body{margin:0;background:transparent;color:CanvasText}main{max-width:920px;margin:auto;padding:18px}.top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}.notice{padding:10px 12px;border:1px solid var(--line);border-radius:10px;color:var(--muted);margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}.card,.panel{border:1px solid var(--line);border-radius:14px;padding:14px;background:color-mix(in srgb,Canvas 96%,var(--accent) 4%)}h1{font-size:20px;margin:0}h2{font-size:16px;margin:0 0 8px}.meta{color:var(--muted);overflow-wrap:anywhere}.status{display:inline-flex;padding:3px 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 16%,transparent)}button{border:1px solid var(--line);background:Canvas;border-radius:9px;padding:8px 11px;cursor:pointer}button.primary{background:var(--accent);color:white;border-color:var(--accent)}button.danger{color:#d33}.actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}label{display:grid;gap:4px;color:var(--muted)}input,select,textarea{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;background:Canvas;color:CanvasText}label.wide,.form-actions{grid-column:1/-1}.form-actions{display:flex;gap:8px}.hidden{display:none!important}#message{min-height:22px;margin:8px 0;color:var(--muted)}dialog{border:1px solid var(--line);border-radius:14px;background:Canvas;color:CanvasText;max-width:700px;width:calc(100% - 28px)}dialog::backdrop{background:#0008}@media(max-width:580px){form{grid-template-columns:1fr}.top{flex-direction:column}}
@@ -135,7 +135,7 @@ export function mailbridgeWidgetHtml(options: MailBridgeWidgetRenderOptions = {}
   <div class="form-actions"><button type="button" id="cancelPolicy">Cancel</button><button class="primary" type="submit">Save policy</button></div>
 </form></dialog>
 <dialog id="deleteMailbox"><h2>Delete mailbox</h2><form id="deleteMailboxForm" method="dialog">
-  <input id="deleteMailboxId" type="hidden"><p class="meta">Type exactly <strong>DELETE</strong> to remove this mailbox and its encrypted data.</p><label>Confirmation<input name="confirmation" autocomplete="off" required></label>
+  <input id="deleteMailboxId" type="hidden"><p class="meta">Type the mailbox ID exactly: <strong id="deleteMailboxConfirmationLabel"></strong>. This removes the mailbox and its encrypted data.</p><label>Mailbox ID confirmation<input name="confirmation" autocomplete="off" required></label>
   <div class="form-actions"><button type="button" id="cancelDeleteMailbox">Cancel</button><button class="danger" type="submit">Delete</button></div>
 </form></dialog>
 <dialog id="deleteAllDialog"><h2>Delete all data</h2><form id="deleteAllForm" method="dialog">
@@ -145,7 +145,14 @@ export function mailbridgeWidgetHtml(options: MailBridgeWidgetRenderOptions = {}
 ${bootstrap}
 <script type="module">
 const bridge=window.openai||{};
-const meta=bridge.toolResponseMetadata||bridge.toolResponseMeta||{};
+function responseMeta(value){
+  const root=value&&typeof value==="object"?value:{};
+  const result=root.mcp_tool_result||root.call_tool_result||root;
+  if(!result||typeof result!=="object")return{};
+  const nested=result._meta;
+  return nested&&typeof nested==="object"?nested:(root._meta&&typeof root._meta==="object"?root._meta:root);
+}
+const meta=responseMeta(bridge.toolResponseMetadata||bridge.toolResponseMeta||{});
 const localDemo=Boolean(meta.local_demo||document.body.dataset.localDemo==="true");
 let token=String(meta.settings_token||"");
 let csrf=String(meta.settings_csrf||"");
@@ -158,7 +165,7 @@ function say(text){message.textContent=text}
 function scrub(formElement){for(const input of formElement.querySelectorAll('input[type="password"]')) input.value=""}
 async function request(path,options={}){
   const run=async()=>{
-    if(!apiBase||!token||!csrf) throw new Error("The settings session is unavailable. Call list_mailboxes again.");
+    if(!apiBase||!token||!csrf) throw new Error("The settings session is unavailable. Call open_mailbox_settings again.");
     const response=await fetch(apiBase+path,{...options,headers:{"Authorization":"Settings "+token,"X-MailBridge-CSRF":csrf,"Content-Type":"application/json",...(options.headers||{})}});
     token=response.headers.get("X-MailBridge-Settings-Token")||"";
     csrf=response.headers.get("X-MailBridge-Settings-CSRF")||"";
@@ -185,13 +192,13 @@ function openAdd(){form.reset();document.querySelector("#editingId").value="";do
 function openEdit(box){form.reset();document.querySelector("#editingId").value=box.mailbox_id;document.querySelector("#editorTitle").textContent="Edit mailbox";for(const el of form.querySelectorAll(".credential,.create-only"))el.classList.add("hidden");for(const name of ["display_name","email","brand","purpose","imap_host","imap_port","tls_mode","send_transport","smtp_host","smtp_port","smtp_tls_mode"])form.elements[name].value=box[name]??"";form.elements.send_enabled.checked=Boolean(box.send_enabled);form.elements.allowed_folders.value=box.allowed_folders.join(", ");editor.showModal()}
 function openReplace(id){replaceForm.reset();document.querySelector("#replaceId").value=id;replace.showModal()}
 function openPolicy(id){operation(async()=>{const data=await request("/mailboxes/"+id+"/send-policy");const value=data.policy;policyForm.reset();document.querySelector("#policyId").value=id;for(const name of ["send_mode","external_recipients","max_recipients","max_per_hour","max_per_day","confirmation_ttl_seconds"])policyForm.elements[name].value=value[name];policyForm.elements.allowed_domains.value=value.allowed_domains.join(", ");policyForm.elements.denied_domains.value=value.denied_domains.join(", ");policyDialog.showModal()})}
-function openDeleteMailbox(id){deleteMailboxForm.reset();document.querySelector("#deleteMailboxId").value=id;deleteMailboxDialog.showModal()}
+function openDeleteMailbox(id){deleteMailboxForm.reset();document.querySelector("#deleteMailboxId").value=id;document.querySelector("#deleteMailboxConfirmationLabel").textContent=id;deleteMailboxDialog.showModal()}
 document.querySelector("#add").addEventListener("click",openAdd);document.querySelector("#cancelEditor").addEventListener("click",()=>{scrub(form);editor.close()});document.querySelector("#cancelReplace").addEventListener("click",()=>{scrub(replaceForm);replace.close()});document.querySelector("#cancelPolicy").addEventListener("click",()=>policyDialog.close());document.querySelector("#cancelDeleteMailbox").addEventListener("click",()=>deleteMailboxDialog.close());document.querySelector("#cancelDeleteAll").addEventListener("click",()=>deleteAllDialog.close());
 document.querySelector("#testDraft").addEventListener("click",()=>operation(async()=>{if(document.querySelector("#editingId").value){say("Use the Test button on the saved mailbox card.");return}const payload=mailboxPayload(form,true,false);try{const data=await request("/mailboxes/test",{method:"POST",body:JSON.stringify(payload)});say("Test: "+data.test.status)}finally{payload.password="";payload.username="";scrub(form)}}));
 form.addEventListener("submit",event=>{event.preventDefault();operation(async()=>{const id=document.querySelector("#editingId").value;if(id){const payload=mailboxPayload(form,false,false);await request("/mailboxes/"+id,{method:"PATCH",body:JSON.stringify(payload)});editor.close();await refresh()}else{const payload=mailboxPayload(form,true,true);try{await request("/mailboxes",{method:"POST",body:JSON.stringify(payload)});editor.close();await refresh()}finally{payload.password="";payload.username="";scrub(form)}}})});
 replaceForm.addEventListener("submit",event=>{event.preventDefault();operation(async()=>{const id=document.querySelector("#replaceId").value;const data=new FormData(replaceForm);const payload={username:field(data,"username"),password:field(data,"password")};try{await request("/mailboxes/"+id+"/replace-credentials",{method:"POST",body:JSON.stringify(payload)});replace.close();await refresh()}finally{payload.password="";payload.username="";scrub(replaceForm)}})});
 policyForm.addEventListener("submit",event=>{event.preventDefault();operation(async()=>{const id=document.querySelector("#policyId").value;const data=new FormData(policyForm);const payload={send_mode:field(data,"send_mode"),require_confirmation:true,allowed_domains:csv(field(data,"allowed_domains")),denied_domains:csv(field(data,"denied_domains")),max_recipients:Number(field(data,"max_recipients")),max_per_hour:Number(field(data,"max_per_hour")),max_per_day:Number(field(data,"max_per_day")),external_recipients:field(data,"external_recipients"),confirmation_ttl_seconds:Number(field(data,"confirmation_ttl_seconds"))};await request("/mailboxes/"+id+"/send-policy",{method:"PATCH",body:JSON.stringify(payload)});policyDialog.close();say("Safe Send policy saved.")})});
-deleteMailboxForm.addEventListener("submit",event=>{event.preventDefault();operation(async()=>{const confirmation=field(new FormData(deleteMailboxForm),"confirmation");if(confirmation!=="DELETE")throw new Error("Invalid confirmation");const id=document.querySelector("#deleteMailboxId").value;await request("/mailboxes/"+id,{method:"DELETE",body:"{}"});deleteMailboxDialog.close();await refresh()})});
+deleteMailboxForm.addEventListener("submit",event=>{event.preventDefault();operation(async()=>{const confirmation=field(new FormData(deleteMailboxForm),"confirmation");const id=document.querySelector("#deleteMailboxId").value;if(confirmation!==id)throw new Error("Mailbox ID confirmation did not match");await request("/mailboxes/"+id,{method:"DELETE",body:JSON.stringify({confirmation})});deleteMailboxDialog.close();await refresh()})});
 document.querySelector("#deleteAll").addEventListener("click",()=>{deleteAllForm.reset();deleteAllDialog.showModal()});
 deleteAllForm.addEventListener("submit",event=>{event.preventDefault();operation(async()=>{const confirmation=field(new FormData(deleteAllForm),"confirmation");if(confirmation!=="DELETE ALL MAILBRIDGE DATA")throw new Error("Invalid confirmation");await request("/account/data",{method:"DELETE",body:JSON.stringify({confirmation})});deleteAllDialog.close();mailboxes=[];render();token="";csrf="";say("All application data and credentials were deleted.")})});
 const initial=bridge.toolOutput?.mailboxes;if(Array.isArray(initial)){mailboxes=initial;render()}operation(refresh);

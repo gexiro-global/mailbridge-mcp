@@ -100,10 +100,10 @@ describe("private app security primitives", () => {
 
   it("consumes settings tokens exactly once and enforces CSRF", () => {
     const sessions = new OneTimeSettingsSessions(30_000);
-    const first = sessions.issue("user-a");
+    const first = sessions.issue("user-a", { scopes: ["mail.settings.write"], client_id: "security-test" });
     expect(sessions.consume(first.token, first.csrf).user_key).toBe("user-a");
     expect(() => sessions.consume(first.token, first.csrf)).toThrow(/already used|expired/i);
-    const second = sessions.issue("user-a");
+    const second = sessions.issue("user-a", { scopes: ["mail.settings.write"], client_id: "security-test" });
     expect(() => sessions.consume(second.token, "wrong-csrf")).toThrow(/CSRF/i);
     expect(() => sessions.consume(second.token, second.csrf)).toThrow(/already used|expired/i);
   });

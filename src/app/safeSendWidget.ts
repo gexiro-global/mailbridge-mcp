@@ -1,8 +1,8 @@
-export const MAILBRIDGE_SAFE_SEND_WIDGET_URI = "ui://mailbridge/safe-send-v0.4.html";
+export const MAILBRIDGE_SAFE_SEND_WIDGET_URI = "ui://mailbridge/safe-send-v2.0.1.html";
 
 export function mailbridgeSafeSendWidgetHtml(): string {
   return `<!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -14,13 +14,13 @@ export function mailbridgeSafeSendWidgetHtml(): string {
 </head>
 <body>
 <main>
-  <div class="top"><div><h1>MailBridge Safe Send</h1><div class="muted">Draft → walidacja → jednorazowe potwierdzenie → SMTP</div></div><span id="version" class="badge">draft —</span></div>
+  <div class="top"><div><h1>MailBridge Safe Send</h1><div class="muted">Draft → validation → one-time confirmation → SMTP</div></div><span id="version" class="badge">draft —</span></div>
   <section class="panel"><form id="composer">
-    <label>Od<input id="from" readonly></label>
-    <label>Do<input id="to" autocomplete="off" required></label>
+    <label>From<input id="from" readonly></label>
+    <label>To<input id="to" autocomplete="off" required></label>
     <label>CC<input id="cc" autocomplete="off"></label>
     <label>BCC<input id="bcc" autocomplete="off"></label>
-    <label class="wide">Temat<input id="subject" maxlength="998" required></label>
+    <label class="wide">Subject<input id="subject" maxlength="998" required></label>
     <label class="wide">Body<textarea id="body" maxlength="200000" required></textarea></label>
   </form><div class="actions"><button id="save">Save draft</button><button id="validate">Check policy</button></div><div id="status" role="status" aria-live="polite"></div></section>
   <section id="review" class="panel hidden"><h2>Pre-send review</h2><div id="policy"></div><div id="warnings"></div><div class="actions"><button id="prepare" class="primary">Prepare one-time confirmation</button></div></section>

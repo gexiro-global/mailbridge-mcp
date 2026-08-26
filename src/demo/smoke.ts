@@ -14,6 +14,7 @@ const expectedTools = [
   "list_mailboxes",
   "list_recent_messages",
   "mailbox_health",
+  "open_mailbox_settings",
   "search",
   "search_messages",
 ];
@@ -38,10 +39,14 @@ async function main(): Promise<void> {
   try {
     const discovered = await client.listTools();
     const names = discovered.tools.map((tool) => tool.name).sort();
-    assert(JSON.stringify(names) === JSON.stringify(expectedTools), `expected exactly 11 tools, received: ${names.join(", ")}`);
-    assert(discovered.tools.every((tool) => tool.annotations?.readOnlyHint === true), "a tool is not annotated read-only");
+    assert(JSON.stringify(names) === JSON.stringify(expectedTools), `expected 11 read tools plus mailbox settings, received: ${names.join(", ")}`);
+    const mailReadTools = discovered.tools.filter((tool) => tool.name !== "open_mailbox_settings");
+    assert(mailReadTools.length === 11 && mailReadTools.every((tool) => tool.annotations?.readOnlyHint === true), "a mail read tool is not annotated read-only");
+    const settingsTool = discovered.tools.find((tool) => tool.name === "open_mailbox_settings");
+    assert(settingsTool?.annotations?.readOnlyHint === false && settingsTool.annotations.destructiveHint === false,
+      "mailbox settings annotations are inaccurate");
     assert(discovered.tools.every((tool) => tool.annotations?.destructiveHint === false), "a destructive tool was discovered");
-    assert(!names.some((name) => /(smtp|send|write|store|append|move|copy|expunge|delete)/i.test(name)), "an SMTP/write tool was discovered");
+    assert(!names.some((name) => /(smtp|send|store|append|move|copy|expunge|delete)/i.test(name)), "an SMTP/mail-mutation tool was discovered");
 
     const resources = await client.listResources();
     assert(resources.resources.some((resource) => resource.uri === MAILBRIDGE_WIDGET_URI), "widget resource was not discovered");
@@ -97,7 +102,8 @@ async function main(): Promise<void> {
       fetch_thread: "PASS",
       list_attachments: "PASS",
       smtp: false,
-      write_tools: false,
+      mail_write_tools: false,
+      settings_tool: "PASS",
     }, null, 2)}\n`);
   } finally {
     await client.close();

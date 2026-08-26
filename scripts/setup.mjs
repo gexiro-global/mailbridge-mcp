@@ -5,8 +5,15 @@ import { randomBytes } from "node:crypto";
 
 const sourceRoot = resolve(import.meta.dirname, "..");
 const root = resolve(process.env.MAILBRIDGE_SETUP_ROOT ?? sourceRoot);
-const configTarget = resolve(root, "config", "mailboxes.yaml");
-const configExample = resolve(sourceRoot, "config", "mailboxes.example.yaml");
+const supportedArguments = new Set(["--production"]);
+const unknownArgument = process.argv.slice(2).find((argument) => !supportedArguments.has(argument));
+if (unknownArgument) throw new Error(`Unsupported setup argument: ${unknownArgument}`);
+
+const production = process.argv.includes("--production");
+const configFilename = production ? "mailboxes.production.yaml" : "mailboxes.yaml";
+const exampleFilename = production ? "mailboxes.production.example.yaml" : "mailboxes.example.yaml";
+const configTarget = resolve(root, "config", configFilename);
+const configExample = resolve(sourceRoot, "config", exampleFilename);
 const secretDirectory = resolve(root, "secrets");
 const dataDirectory = resolve(root, "runtime", "data");
 
@@ -33,10 +40,13 @@ for (const name of [
 
 process.stdout.write(JSON.stringify({
   status: "READY",
-  config: "config/mailboxes.yaml",
+  mode: production ? "production" : "local",
+  config: `config/${configFilename}`,
   secret_files: 3,
   secret_values_printed: 0,
-    next: "Review config/mailboxes.yaml, then run npm start",
+  next: production
+    ? "Replace every production placeholder, run npm run build, then run npm run doctor:production"
+    : "Review config/mailboxes.yaml, then run npm start",
 }) + "\n");
 
 async function exists(path) {

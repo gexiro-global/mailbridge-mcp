@@ -27,11 +27,13 @@ describe("MCP contract", () => {
     expect(result.tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
     expect(result.tools.every((tool) => tool.annotations?.destructiveHint === false)).toBe(true);
     expect(result.tools.every((tool) => tool.annotations?.idempotentHint === true)).toBe(true);
+    expect(result.tools.find((tool) => tool.name === "list_mailboxes")?.annotations?.openWorldHint).toBe(false);
+    expect(result.tools.filter((tool) => tool.name !== "list_mailboxes").every((tool) => tool.annotations?.openWorldHint === true)).toBe(true);
     expect(result.tools.every((tool) => tool.description?.startsWith("Use this"))).toBe(true);
     expect(JSON.stringify(result.tools.map((tool) => tool.inputSchema))).not.toMatch(/password|username|credential/i);
   });
 
-  it("exposes the v0.4 Safe Send contracts with accurate annotations only when the send layer is enabled", async () => {
+  it("exposes the Safe Send contracts with accurate annotations only when the send layer is enabled", async () => {
     const service = new MailService(testConfig, new FakeFactory(), new StableIdCodec("0123456789abcdef0123456789abcdef"));
     const writer = {} as MailSendService;
     const server = createMailBridgeMcpServer(service, true, undefined, writer);
@@ -68,6 +70,8 @@ describe("MCP contract", () => {
         expected_version: expect.any(Object),
       },
     });
+    expect(byName.get("search")?.outputSchema).toBeDefined();
+    expect(byName.get("fetch")?.outputSchema).toBeDefined();
   });
 
   it("implements the standard search and fetch knowledge contracts", async () => {

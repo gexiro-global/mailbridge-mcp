@@ -1,5 +1,6 @@
-import { chmod, lstat, mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, rename, unlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
+import { constants } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
 const SAFE_SECRET_NAME = /^[A-Za-z0-9._-]+$/;
@@ -12,15 +13,21 @@ export class FileSecretProvider {
   }
 
   async read(reference: string): Promise<string> {
-    if (!SAFE_SECRET_NAME.test(reference)) {
-      throw new Error("Invalid secret reference");
+    const target = this.#target(reference);
+    const pathStat = await lstat(target);
+    if (!pathStat.isFile() || pathStat.isSymbolicLink()) throw new Error("Secret reference is not a regular file");
+    const noFollow = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
+    const handle = await open(target, constants.O_RDONLY | noFollow);
+    let value: string;
+    try {
+      const openedStat = await handle.stat();
+      if (!openedStat.isFile() || openedStat.dev !== pathStat.dev || openedStat.ino !== pathStat.ino) {
+        throw new Error("Secret file changed while it was being opened");
+      }
+      value = (await handle.readFile("utf8")).trimEnd();
+    } finally {
+      await handle.close();
     }
-    const target = resolve(this.#secretDirectory, reference);
-    const rel = relative(this.#secretDirectory, target);
-    if (rel.startsWith("..") || isAbsolute(rel)) {
-      throw new Error("Secret path escaped the configured directory");
-    }
-    const value = (await readFile(target, "utf8")).trimEnd();
     if (!value) {
       throw new Error(`Secret ${reference} is empty`);
     }
@@ -33,7 +40,8 @@ export class FileSecretProvider {
       const target = resolve(this.#secretDirectory, reference);
       const rel = relative(this.#secretDirectory, target);
       if (rel.startsWith("..") || isAbsolute(rel)) return false;
-      return (await stat(target)).isFile();
+      const targetStat = await lstat(target);
+      return targetStat.isFile() && !targetStat.isSymbolicLink();
     } catch {
       return false;
     }
