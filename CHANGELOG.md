@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.0 — 2026-08-29
+
+- added bounded outgoing attachments to encrypted Safe Send drafts, including
+  metadata-only MCP results, executable-extension blocking, per-file and
+  aggregate limits, version invalidation and zeroized in-memory MIME buffers;
+- added independently gated Sent-copy persistence that reconciles by
+  deterministic Message-ID and records `provider_saved`, `imap_appended`,
+  `failed`, `disabled`, `not_applicable` or `legacy_untracked` without
+  changing SMTP acceptance;
+- preserved public-address resolution, TLS certificate and hostname validation,
+  OAuth scopes, read-only `EXAMINE` / `BODY.PEEK` semantics and encrypted
+  user-scoped storage;
+- expanded the public Safe Send surface from 12 to 14 optional tools while
+  retaining 11 strictly read-only mail tools and default-disabled sending;
+- updated the English Apps SDK widget, synthetic acceptance flow, Docker
+  defaults, configuration reference and release evidence for version 2.1.0.
+
 ## 2.0.2 — 2026-08-26
 
 - hardened error logging so credential-bearing provider and transport failures

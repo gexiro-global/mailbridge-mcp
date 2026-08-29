@@ -57,6 +57,8 @@ services:
       MAILBRIDGE_ID_KEY_FILE: mailbridge_id_hmac_key
       MAILBRIDGE_LOG_LEVEL: info
       MAILBRIDGE_ALLOW_SEND: "false"
+      MAILBRIDGE_SAVE_SENT_COPY: "false"
+      MAILBRIDGE_SENT_COPY_MAILBOX_IDS: ""
     volumes:
       - ./config/mailboxes.production.yaml:/app/config/mailboxes.production.yaml:ro
       - mailbridge_secrets:/run/secrets/mailbridge:ro

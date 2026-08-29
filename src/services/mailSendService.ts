@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type {
   DraftPayload,
+  DraftAttachment,
   DraftValidation,
   MailDraftView,
   SendAuditEventView,
@@ -18,6 +19,15 @@ import type { MailTransport } from "../send/smtpAdapter.js";
 import type { MailService } from "./mailService.js";
 
 const email = z.email();
+const MAX_ATTACHMENT_COUNT = 10;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENT_BYTES = 18 * 1024 * 1024;
+const BLOCKED_ATTACHMENT_EXTENSIONS = new Set([
+  "apk", "app", "bat", "cmd", "com", "dmg", "exe", "hta", "img", "iso",
+  "jar", "js", "jse", "lnk", "msi", "msp", "pif", "ps1", "scr", "vbs", "vbe", "wsf",
+]);
+const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const MIME = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/;
 
 export interface ComposeInput {
   mailbox_id: string;
@@ -32,6 +42,12 @@ export interface ReplyInput {
   mailbox_id: string;
   stable_message_id: string;
   text_body: string;
+}
+
+export interface DraftAttachmentInput {
+  filename: string;
+  mime_type: string;
+  content_base64: string;
 }
 
 export interface SendExecutionResult {
@@ -63,7 +79,32 @@ export class MailSendService {
   updateDraft(draftId: string, expectedVersion: number, input: ComposeInput): MailDraftView {
     const current = this.store.getDraft(this.userKey, draftId);
     if (current.mailbox_id !== input.mailbox_id) throw new MailBridgeError("Draft mailbox cannot be changed", "MAILBOX_MISMATCH");
-    return this.store.updateDraft(this.userKey, draftId, expectedVersion, this.#compose(input));
+    const payload = this.store.getDraftPayload(this.userKey, draftId);
+    return this.store.updateDraft(
+      this.userKey,
+      draftId,
+      expectedVersion,
+      { ...this.#compose(input), attachments: payload.attachments },
+    );
+  }
+
+  addDraftAttachment(draftId: string, expectedVersion: number, input: DraftAttachmentInput): MailDraftView {
+    const draft = this.store.getDraft(this.userKey, draftId);
+    if (draft.status !== "draft") throw new MailBridgeError("A sent draft cannot be edited", "DRAFT_ALREADY_SENT");
+    if (draft.version !== expectedVersion) throw new MailBridgeError("Draft changed since it was opened", "DRAFT_VERSION_CONFLICT");
+    if (draft.attachments.length >= MAX_ATTACHMENT_COUNT) {
+      throw new MailBridgeError("Attachment count limit exceeded", "ATTACHMENT_LIMIT_EXCEEDED");
+    }
+    const attachment = normalizeDraftAttachment(input);
+    const total = draft.attachments.reduce((sum, item) => sum + item.size, 0) + attachment.size;
+    if (total > MAX_TOTAL_ATTACHMENT_BYTES) {
+      throw new MailBridgeError("Total attachment size limit exceeded", "ATTACHMENT_LIMIT_EXCEEDED");
+    }
+    return this.store.addDraftAttachment(this.userKey, draftId, expectedVersion, attachment);
+  }
+
+  removeDraftAttachment(draftId: string, expectedVersion: number, attachmentId: string): MailDraftView {
+    return this.store.removeDraftAttachment(this.userKey, draftId, expectedVersion, attachmentId);
   }
 
   getSendPolicy(mailboxId: string): SendPolicyView {
@@ -79,18 +120,19 @@ export class MailSendService {
   validateDraft(draftId: string): DraftValidation {
     const draft = this.store.getDraft(this.userKey, draftId);
     if (draft.status !== "draft") throw new MailBridgeError("Draft has already been sent", "DRAFT_ALREADY_SENT");
-    return this.#validate(draftId, draft.version, draft);
+    return this.#validate(draftId, draft.version, this.store.getDraftPayload(this.userKey, draftId));
   }
 
   prepareDraftSend(draftId: string): SendConfirmationView {
     const draft = this.store.getDraft(this.userKey, draftId);
+    const payload = this.store.getDraftPayload(this.userKey, draftId);
     const validation = this.validateDraft(draftId);
     if (validation.blocked) throw new MailBridgeError(`Draft is blocked: ${validation.reasons.join(", ")}`, "SEND_POLICY_BLOCKED");
     const policy = this.getSendPolicy(draft.mailbox_id);
     return this.store.createSendConfirmation(
       this.userKey,
       draftId,
-      hashPayload(draft),
+      hashPayload(payload),
       validation,
       policy.confirmation_ttl_seconds,
     );
@@ -102,8 +144,9 @@ export class MailSendService {
     expectedVersion?: number,
   ): Promise<{ draft: MailDraftView } & SendExecutionResult> {
     const draft = this.store.getDraft(this.userKey, draftId);
+    const payload = this.store.getDraftPayload(this.userKey, draftId);
     const key = `draft:${draftId}`;
-    const payloadHash = hashPayload(draft);
+    const payloadHash = hashPayload(payload);
     const previous = this.store.getSendReceipt(this.userKey, key);
     if (previous) {
       if (previous.payload_hash !== payloadHash) throw new MailBridgeError("Draft payload changed after send", "IDEMPOTENCY_CONFLICT");
@@ -116,7 +159,7 @@ export class MailSendService {
     }
     if (draft.status !== "draft") throw new MailBridgeError("Draft has already been sent", "DRAFT_ALREADY_SENT");
     const policy = this.getSendPolicy(draft.mailbox_id);
-    const validation = this.#validate(draftId, draft.version, draft);
+    const validation = this.#validate(draftId, draft.version, payload);
     if (validation.blocked) throw new MailBridgeError(`Draft is blocked: ${validation.reasons.join(", ")}`, "SEND_POLICY_BLOCKED");
     if (policy.require_confirmation) {
       if (!confirmationId || expectedVersion === undefined) {
@@ -127,7 +170,7 @@ export class MailSendService {
         this.userKey, confirmationId, draftId, expectedVersion, payloadHash, policy.policy_version,
       );
     }
-    const sent = await this.#sendOnce(draft, key, policy, validation);
+    const sent = await this.#sendOnce(payload, key, policy, validation);
     return {
       draft: sent.receipt.accepted.length > 0 ? this.store.markDraftSent(this.userKey, draftId, sent.receipt) : draft,
       ...sent,
@@ -240,6 +283,7 @@ export class MailSendService {
       text_body: bodyValue(input.text_body),
       in_reply_to: null,
       references: [],
+      attachments: [],
     };
   }
 
@@ -259,6 +303,7 @@ export class MailSendService {
       text_body: bodyValue(input.text_body),
       in_reply_to: original.message_id,
       references,
+      attachments: [],
     };
   }
 
@@ -312,7 +357,46 @@ function hashPayload(payload: DraftPayload): string {
     text_body: payload.text_body,
     in_reply_to: payload.in_reply_to,
     references: payload.references,
+    attachments: payload.attachments.map(({ attachment_id, filename, mime_type, size, sha256 }) => ({
+      attachment_id, filename, mime_type, size, sha256,
+    })),
   }), "utf8").digest("hex");
+}
+
+function normalizeDraftAttachment(input: DraftAttachmentInput): DraftAttachment {
+  const filename = input.filename.normalize("NFC").trim();
+  if (
+    !filename || filename.length > 255 || filename === "." || filename === ".." ||
+    /[\u0000-\u001f\u007f/\\]/.test(filename)
+  ) throw new MailBridgeError("Invalid attachment filename", "INVALID_ATTACHMENT");
+  const extension = filename.includes(".") ? filename.split(".").pop()!.toLowerCase() : "";
+  if (BLOCKED_ATTACHMENT_EXTENSIONS.has(extension)) {
+    throw new MailBridgeError("Executable attachment types are blocked", "ATTACHMENT_TYPE_BLOCKED");
+  }
+  const mimeType = input.mime_type.trim().toLowerCase();
+  if (!MIME.test(mimeType) || mimeType.length > 127) {
+    throw new MailBridgeError("Invalid attachment MIME type", "INVALID_ATTACHMENT");
+  }
+  if (
+    !input.content_base64 || input.content_base64.length > Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4 + 4 ||
+    !BASE64.test(input.content_base64)
+  ) throw new MailBridgeError("Attachment content is not valid bounded base64", "INVALID_ATTACHMENT");
+  const bytes = Buffer.from(input.content_base64, "base64");
+  try {
+    if (bytes.byteLength === 0 || bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+      throw new MailBridgeError("Attachment size limit exceeded", "ATTACHMENT_LIMIT_EXCEEDED");
+    }
+    return {
+      attachment_id: `datt_${randomUUID().replaceAll("-", "")}`,
+      filename,
+      mime_type: mimeType,
+      size: bytes.byteLength,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      content_base64: bytes.toString("base64"),
+    };
+  } finally {
+    bytes.fill(0);
+  }
 }
 
 function legacyOperation(mailboxId: string, key: string, receipt: SendReceipt): SendOperationView {

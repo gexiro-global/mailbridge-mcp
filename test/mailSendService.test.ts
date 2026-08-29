@@ -49,6 +49,61 @@ describe("MailBridge Safe Send layer", () => {
     expect(transport.sent).toHaveLength(0);
   });
 
+  it("encrypts bounded draft attachments, returns metadata only and binds them to confirmation", async () => {
+    const { writer, transport } = setup();
+    const draft = writer.createDraft(message("Attachment"));
+    const content = Buffer.from("synthetic attachment", "utf8").toString("base64");
+    const attached = writer.addDraftAttachment(draft.draft_id, draft.version, {
+      filename: "evidence.txt",
+      mime_type: "text/plain",
+      content_base64: content,
+    });
+
+    expect(attached.attachments).toEqual([
+      expect.objectContaining({
+        attachment_id: expect.stringMatching(/^datt_[a-f0-9]{32}$/),
+        filename: "evidence.txt",
+        mime_type: "text/plain",
+        size: 20,
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    ]);
+    expect(JSON.stringify(attached)).not.toContain(content);
+    expect(() => writer.addDraftAttachment(draft.draft_id, attached.version, {
+      filename: "blocked.ps1",
+      mime_type: "text/plain",
+      content_base64: content,
+    })).toThrowError(/blocked/i);
+    expect(() => writer.addDraftAttachment(draft.draft_id, attached.version, {
+      filename: "invalid.txt",
+      mime_type: "text/plain",
+      content_base64: "***not-base64***",
+    })).toThrowError(/base64/i);
+
+    const staleConfirmation = writer.prepareDraftSend(draft.draft_id);
+    const removed = writer.removeDraftAttachment(
+      draft.draft_id,
+      attached.version,
+      attached.attachments[0]!.attachment_id,
+    );
+    expect(removed.attachments).toEqual([]);
+    await expect(writer.sendDraft(draft.draft_id, staleConfirmation.confirmation_id, removed.version))
+      .rejects.toMatchObject({ code: "SEND_CONFIRMATION_INVALID" });
+
+    const reattached = writer.addDraftAttachment(draft.draft_id, removed.version, {
+      filename: "evidence.txt",
+      mime_type: "text/plain",
+      content_base64: content,
+    });
+    const confirmation = writer.prepareDraftSend(draft.draft_id);
+    await writer.sendDraft(draft.draft_id, confirmation.confirmation_id, confirmation.draft_version);
+    expect(transport.sent[0]!.payload.attachments[0]).toEqual(expect.objectContaining({
+      filename: "evidence.txt",
+      content_base64: content,
+    }));
+    expect(reattached.version).toBe(removed.version + 1);
+  });
+
   it("blocks direct send by default and permits it only with an explicit direct policy", async () => {
     const { writer, transport } = setup();
     await expect(writer.sendEmail(message("Direct blocked"), "direct-blocked-0001"))

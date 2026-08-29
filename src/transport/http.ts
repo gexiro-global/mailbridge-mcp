@@ -93,6 +93,9 @@ export async function startHttpTransport(
       access: "private",
       scopes: config.auth.scopes,
       write_tools: localDemo?.safeSend === true || process.env.MAILBRIDGE_ALLOW_SEND === "true",
+      sent_copy: process.env.MAILBRIDGE_ALLOW_SEND === "true" && process.env.MAILBRIDGE_SAVE_SENT_COPY === "true"
+        ? "enabled"
+        : "disabled",
       attachment_content: "read_only_bounded",
     });
   });

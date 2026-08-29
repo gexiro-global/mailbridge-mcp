@@ -1,1 +1,1 @@
-export const MAILBRIDGE_VERSION = "2.0.2";
+export const MAILBRIDGE_VERSION = "2.1.0";

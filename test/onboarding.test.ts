@@ -99,12 +99,14 @@ describe("production onboarding", () => {
     await chmod(secretPath, 0o600);
 
     const script = resolve("scripts/provision-container-secrets.mjs");
+    const runtimeUid = typeof process.getuid === "function" && process.getuid() > 0 ? process.getuid() : 10001;
+    const runtimeGid = typeof process.getgid === "function" && process.getgid() > 0 ? process.getgid() : 10001;
     const result = await execute(process.execPath, [
       script,
       source,
       target,
-      String(typeof process.getuid === "function" ? process.getuid() : 10001),
-      String(typeof process.getgid === "function" ? process.getgid() : 10001),
+      String(runtimeUid),
+      String(runtimeGid),
     ]);
     expect(result.stdout).not.toContain(secret);
     expect(JSON.parse(result.stdout)).toMatchObject({
@@ -120,8 +122,8 @@ describe("production onboarding", () => {
       script,
       source,
       target,
-      String(typeof process.getuid === "function" ? process.getuid() : 10001),
-      String(typeof process.getgid === "function" ? process.getgid() : 10001),
+      String(runtimeUid),
+      String(runtimeGid),
     ]);
     expect(rotated.stdout).not.toContain(rotatedSecret);
     expect(await readFile(join(target, "mailbridge_test_key"), "utf8")).toBe(rotatedSecret);

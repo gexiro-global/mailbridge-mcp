@@ -65,7 +65,7 @@ Do not publish any of these without new, specific evidence and authorization:
 Record the release tag and immutable commit before publishing. Every box must be
 supported by current CI or a redacted local artifact:
 
-Latest local evidence: [2.0.2 release candidate verification](RELEASE_VERIFICATION_2.0.2.md).
+Latest local evidence: [2.1.0 release verification](RELEASE_VERIFICATION_2.1.0.md).
 Its external gates still apply until the immutable release workflow succeeds.
 
 - [ ] clean checkout at the intended release commit;

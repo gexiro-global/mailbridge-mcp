@@ -51,6 +51,9 @@ describe("Apps SDK widget", () => {
     expect(html).toContain('callTool("validate_draft"');
     expect(html).toContain('callTool("prepare_draft_send"');
     expect(html).toContain('callTool("send_draft"');
+    expect(html).toContain('type="file"');
+    expect(html).toContain('callTool("add_draft_attachment"');
+    expect(html).toContain('callTool("remove_draft_attachment"');
     expect(html).toContain("irreversible SMTP operation");
     expect(html).not.toContain("localStorage");
     expect(html).not.toContain("sessionStorage");
@@ -161,7 +164,8 @@ describe("Apps SDK widget", () => {
     const tools = await client.listTools();
     const sendNames = new Set([
       "open_mail_composer", "update_draft", "get_send_policy", "validate_draft", "prepare_draft_send",
-      "get_send_status", "list_send_audit", "create_draft", "reply_draft", "send_draft", "send_email", "reply_email",
+      "get_send_status", "list_send_audit", "create_draft", "reply_draft", "add_draft_attachment",
+      "remove_draft_attachment", "send_draft", "send_email", "reply_email",
     ]);
     for (const tool of tools.tools) {
       const scopes = tool.name === "mailbox_health"
