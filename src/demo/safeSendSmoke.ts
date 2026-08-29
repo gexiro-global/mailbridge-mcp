@@ -5,6 +5,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { MAILBRIDGE_SAFE_SEND_WIDGET_URI } from "../app/safeSendWidget.js";
 
 const expectedTools = [
+  "add_draft_attachment",
   "create_draft",
   "fetch",
   "fetch_attachment",
@@ -23,6 +24,7 @@ const expectedTools = [
   "prepare_draft_send",
   "reply_draft",
   "reply_email",
+  "remove_draft_attachment",
   "search",
   "search_messages",
   "send_draft",
@@ -47,7 +49,7 @@ async function main(): Promise<void> {
   });
   assert(widgetPage.includes("LOCAL SAFE SEND STAGING — SYNTHETIC TRANSPORT — NO REAL EMAIL"), "safe staging warning is missing");
 
-  const client = new Client({ name: "mailbridge-v2-safe-send-smoke", version: "2.0.2" }, { capabilities: {} });
+  const client = new Client({ name: "mailbridge-v2-safe-send-smoke", version: "2.1.0" }, { capabilities: {} });
   const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`));
   await client.connect(transport);
   try {
@@ -73,13 +75,28 @@ async function main(): Promise<void> {
     const created = structured(await call(client, "create_draft", {
       mailbox_id: mailboxId,
       to: ["recipient@external.synthetic.invalid"],
-      subject: "MailBridge v2.0.2 synthetic Safe Send acceptance",
+      subject: "MailBridge v2.1.0 synthetic Safe Send acceptance",
       text_body: "This is a synthetic transport test. No real email is sent.",
     }));
-    const draft = record(created.draft, "create_draft returned no draft");
+    let draft = record(created.draft, "create_draft returned no draft");
     const draftId = String(draft.draft_id ?? "");
-    const draftVersion = Number(draft.version ?? 0);
-    assert(draftId.startsWith("draft_") && draftVersion === 1, "draft identity/version is invalid");
+    assert(draftId.startsWith("draft_") && Number(draft.version ?? 0) === 1, "draft identity/version is invalid");
+
+    const attachmentBytes = Buffer.from("MailBridge synthetic attachment acceptance", "utf8");
+    const attachmentBase64 = attachmentBytes.toString("base64");
+    attachmentBytes.fill(0);
+    const attached = structured(await call(client, "add_draft_attachment", {
+      draft_id: draftId,
+      expected_version: Number(draft.version),
+      filename: "synthetic-acceptance.txt",
+      mime_type: "text/plain",
+      content_base64: attachmentBase64,
+    }));
+    draft = record(attached.draft, "add_draft_attachment returned no draft");
+    const attachments = asRecords(draft.attachments);
+    assert(attachments.length === 1 && attachments[0]?.filename === "synthetic-acceptance.txt",
+      "synthetic attachment metadata is missing");
+    assert(!JSON.stringify(attached).includes(attachmentBase64), "outbound attachment bytes leaked into tool output");
 
     await call(client, "open_mail_composer", { draft_id: draftId });
     const validation = structured(await call(client, "validate_draft", { draft_id: draftId }));
@@ -122,6 +139,8 @@ async function main(): Promise<void> {
       draft_confirmation: "PASS",
       synthetic_transport_submissions: afterSendCount - beforeSendCount,
       synthetic_transport_total: afterSendCount,
+      outgoing_attachment: "PASS",
+      attachment_bytes_in_tool_output: 0,
       idempotent_replay: "PASS",
       direct_send_default_policy: "BLOCKED",
       real_mailboxes_connected: 0,

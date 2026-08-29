@@ -27,6 +27,11 @@ machine:
   to avoid duplicate mail.
 - Audit rows contain state, counts and reason codes, but no recipient addresses,
   message bodies or credentials.
+- Draft attachments use the same encrypted draft envelope. A draft may contain
+  at most 10 files, each at most 10 MiB and 18 MiB in aggregate; executable file
+  extensions and malformed MIME/base64 payloads are rejected.
+- Adding or removing an attachment increments the draft version and invalidates
+  any previous validation or one-time confirmation.
 
 These controls reduce accidental sends; they do not guarantee that a recipient,
 message or model decision is correct. The user and operator remain responsible
@@ -59,10 +64,31 @@ The Settings UI and API expose:
 
 Domain comparison uses canonical ASCII DNS names and exact domain matching.
 
+## Sent-copy evidence
+
+SMTP acceptance and mailbox persistence are separate outcomes. Sent-copy support
+is disabled unless both `MAILBRIDGE_ALLOW_SEND=true` and
+`MAILBRIDGE_SAVE_SENT_COPY=true` are set. In addition, the mailbox ID must be
+listed in the comma-separated `MAILBRIDGE_SENT_COPY_MAILBOX_IDS` allowlist; an
+empty allowlist enables no mailbox.
+
+After SMTP acceptance, MailBridge opens the server-discovered special-use
+`\\Sent` folder read-only and searches the deterministic Message-ID. If the
+provider already saved the message, the receipt reports `provider_saved`.
+Otherwise MailBridge appends the exact accepted RFC 822/MIME bytes with
+`\\Seen` and reports `imap_appended`. Uncertain append outcomes are
+reconciled by Message-ID before any retry, so SMTP is never repeated merely to
+create a Sent copy.
+
+A receipt may instead report `failed`, `disabled`, `not_applicable` or
+`legacy_untracked`. None of these states proves final delivery or that a
+recipient read the message. Sent-copy support is internal and is not exposed as
+a general IMAP mutation tool.
+
 ## Apps SDK surface
 
-The Safe Send preview is a separate MCP Apps resource. Version 2.0.2 registers
-`ui://mailbridge/safe-send-v2.0.2.html`. Clients should use the
+The Safe Send preview is a separate MCP Apps resource. Version 2.1.0 registers
+`ui://mailbridge/safe-send-v2.1.0.html`. Clients should use the
 `ui.resourceUri` supplied by tool metadata rather than hard-code that URI across
 future releases.
 
@@ -77,6 +103,8 @@ Optional tool contracts:
 - `create_draft`
 - `reply_draft`
 - `update_draft`
+- `add_draft_attachment`
+- `remove_draft_attachment`
 - `get_send_policy`
 - `validate_draft`
 - `prepare_draft_send`

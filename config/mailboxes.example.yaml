@@ -1,6 +1,6 @@
 server:
   name: mailbridge-mcp
-  version: 2.0.2
+  version: 2.1.0
   bind_host: 127.0.0.1
   port: 3091
   public_base_url: https://mailbridge.example.invalid
@@ -9,7 +9,7 @@ server:
     - localhost
   allowed_origins:
     - https://chatgpt.com
-  request_max_bytes: 1048576
+  request_max_bytes: 16777216
   rate_limit:
     window_ms: 60000
     max_requests: 60

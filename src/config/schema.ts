@@ -96,7 +96,7 @@ export const MailBridgeConfigSchema = z
       public_base_url: z.url(),
       allowed_hosts: z.array(z.string().min(1)).min(1).max(64),
       allowed_origins: z.array(z.url()).max(64).default([]),
-      request_max_bytes: z.number().int().min(1024).max(10 * 1024 * 1024).default(1024 * 1024),
+      request_max_bytes: z.number().int().min(1024).max(20 * 1024 * 1024).default(1024 * 1024),
       rate_limit: z.object({
         window_ms: z.number().int().min(1000).max(60 * 60 * 1000).default(60_000),
         max_requests: z.number().int().min(1).max(10_000).default(60),

@@ -5,6 +5,7 @@ import { StableIdCodec } from "../security/stableId.js";
 import { MailService, type InitialConnectionStates } from "../services/mailService.js";
 import { MailSendService } from "../services/mailSendService.js";
 import { SmtpMailTransport } from "../send/smtpAdapter.js";
+import { ImapSentCopyWriter } from "../send/sentCopy.js";
 import type { MailboxStore } from "./store.js";
 
 export interface ScopedMailService {
@@ -21,6 +22,8 @@ export class PrivateAppServiceFactory {
     readonly store: MailboxStore,
     messageIdMaster: Buffer | string,
     readonly allowSend = false,
+    readonly saveSentCopy = false,
+    readonly sentCopyMailboxIds: ReadonlySet<string> = new Set(),
   ) {
     this.#messageIdMaster = Buffer.isBuffer(messageIdMaster) ? Buffer.from(messageIdMaster) : Buffer.from(messageIdMaster, "utf8");
     if (this.#messageIdMaster.byteLength < 32) throw new Error("Message-ID HMAC master must contain at least 32 bytes");
@@ -75,7 +78,10 @@ export class PrivateAppServiceFactory {
     }]));
     const userIdKey = createHmac("sha256", this.#messageIdMaster).update(userKey, "utf8").digest();
     const service = new MailService(config, new DefaultImapAdapterFactory(config, reader), new StableIdCodec(userIdKey), states);
-    const writer = this.allowSend ? new MailSendService(userKey, this.store, service, new SmtpMailTransport(reader)) : undefined;
+    const sentCopy = this.allowSend && this.saveSentCopy ? new ImapSentCopyWriter(reader) : undefined;
+    const writer = this.allowSend
+      ? new MailSendService(userKey, this.store, service, new SmtpMailTransport(reader, sentCopy, undefined, this.sentCopyMailboxIds))
+      : undefined;
     return {
       service,
       ...(writer ? { writer } : {}),

@@ -47,18 +47,19 @@ describe("MCP contract", () => {
     const byName = new Map(result.tools.map((tool) => [tool.name, tool]));
     const safeSendTools = [
       "open_mail_composer", "update_draft", "get_send_policy", "validate_draft", "prepare_draft_send",
-      "get_send_status", "list_send_audit", "create_draft", "reply_draft", "send_draft", "send_email", "reply_email",
+      "get_send_status", "list_send_audit", "create_draft", "reply_draft", "add_draft_attachment",
+      "remove_draft_attachment", "send_draft", "send_email", "reply_email",
     ];
     expect([...byName.keys()].filter((name) => safeSendTools.includes(name)).sort()).toEqual([
-      "create_draft", "get_send_policy", "get_send_status", "list_send_audit", "open_mail_composer",
-      "prepare_draft_send", "reply_draft", "reply_email", "send_draft", "send_email", "update_draft", "validate_draft",
+      "add_draft_attachment", "create_draft", "get_send_policy", "get_send_status", "list_send_audit", "open_mail_composer",
+      "prepare_draft_send", "remove_draft_attachment", "reply_draft", "reply_email", "send_draft", "send_email", "update_draft", "validate_draft",
     ]);
-    expect(result.tools).toHaveLength(23);
+    expect(result.tools).toHaveLength(25);
     expect(result.tools.every((tool) => tool.description?.startsWith("Use this"))).toBe(true);
     for (const name of ["open_mail_composer", "get_send_policy", "validate_draft", "get_send_status", "list_send_audit"]) {
       expect(byName.get(name)?.annotations).toEqual(expect.objectContaining({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }));
     }
-    for (const name of ["create_draft", "reply_draft", "update_draft", "prepare_draft_send"]) {
+    for (const name of ["create_draft", "reply_draft", "update_draft", "add_draft_attachment", "remove_draft_attachment", "prepare_draft_send"]) {
       expect(byName.get(name)?.annotations).toEqual(expect.objectContaining({ readOnlyHint: false, destructiveHint: false, openWorldHint: false }));
     }
     for (const name of ["send_draft", "send_email", "reply_email"]) {

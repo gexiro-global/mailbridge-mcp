@@ -128,16 +128,38 @@ export interface DraftPayload {
   text_body: string;
   in_reply_to: string | null;
   references: string[];
+  attachments: DraftAttachment[];
 }
 
-export interface MailDraftView extends DraftPayload {
+export interface DraftAttachment {
+  attachment_id: string;
+  filename: string;
+  mime_type: string;
+  size: number;
+  sha256: string;
+  content_base64: string;
+}
+
+export type DraftAttachmentView = Omit<DraftAttachment, "content_base64">;
+
+export interface MailDraftView extends Omit<DraftPayload, "attachments"> {
   draft_id: string;
   version: number;
+  attachments: DraftAttachmentView[];
   status: "draft" | "sent";
   created_at: string;
   updated_at: string;
   sent_at: string | null;
   message_id: string | null;
+}
+
+export type SentCopyState = "disabled" | "not_applicable" | "provider_saved" | "imap_appended" | "failed" | "legacy_untracked";
+
+export interface SentCopyResult {
+  state: SentCopyState;
+  folder: string | null;
+  attempts: number;
+  error_code: string | null;
 }
 
 export interface SendReceipt {
@@ -146,6 +168,7 @@ export interface SendReceipt {
   accepted: string[];
   rejected: string[];
   sent_at: string;
+  sent_copy?: SentCopyResult;
 }
 
 export interface SendPolicyView extends SendPolicyInput {

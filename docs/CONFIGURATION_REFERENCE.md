@@ -18,7 +18,9 @@ controlled operator configurations.
 actual reviewed deployment. Production rejects HTTP, placeholder hosts, an
 unsafe listener/auth combination and an empty OAuth subject allowlist. Configure
 request, snippet, body, source and attachment bounds for the deployment's risk
-profile.
+profile. A 10 MiB outgoing attachment expands under base64; the supplied
+templates therefore allow 16 MiB per JSON request. Keep reverse-proxy limits in
+sync, and reduce this value when Safe Send attachments are not required.
 
 `privacy.audit_retention_days` bounds the emergency admin audit view; it is not
 a physical-deletion guarantee for the database, log file or backups. Mailbox-
@@ -72,6 +74,13 @@ disabled unless the process environment contains the exact value
 `MAILBRIDGE_ALLOW_SEND=true`. Each mailbox still requires `send_enabled=true`
 and a server-side policy. The recommended policy is `draft_only` with required
 confirmation. See [Safe Send](SAFE_SEND.md).
+
+Outgoing draft attachments are encrypted and bounded by fixed application
+limits. Optional Sent-copy persistence is separately controlled by
+`MAILBRIDGE_SAVE_SENT_COPY=true` and the comma-separated exact mailbox IDs in
+`MAILBRIDGE_SENT_COPY_MAILBOX_IDS`. An empty allowlist enables no mailbox.
+Sent-copy uses only a server-discovered selectable special-use `\\Sent` folder
+and reports its result independently from SMTP acceptance.
 
 ## Emergency panel
 

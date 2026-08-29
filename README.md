@@ -30,13 +30,17 @@ Microsoft or any email provider.
 - attachment retrieval bounded to 25 MiB and treated as untrusted content;
 - an Apps SDK settings widget that never returns a stored password;
 - OAuth resource-server validation for remote deployments;
-- an optional 12-tool Safe Send layer with encrypted drafts, idempotency,
-  persistent rate limits, recipient-domain policy and explicit confirmation;
+- an optional 14-tool Safe Send layer with encrypted drafts, bounded outgoing
+  attachments, idempotency, persistent rate limits, recipient-domain policy,
+  explicit confirmation and independently gated Sent-copy receipts;
 - synthetic read-only and Safe Send demos that open neither IMAP nor SMTP.
 
 Read tools never call `STORE`, `APPEND`, `MOVE`, `COPY` or `EXPUNGE`. SMTP tools
 are not registered unless both the process-wide feature gate and the selected
-mailbox policy enable them.
+mailbox policy enable them. The optional Sent-copy component is not an MCP tool:
+after SMTP acceptance it can append only the exact accepted MIME bytes to the
+server-discovered special-use `\\Sent` folder, after a read-only Message-ID
+duplicate check and only for an explicit mailbox allowlist.
 
 “Read-only” describes operations on mailbox messages and flags. Adding,
 replacing, disabling or deleting an account intentionally changes the user's
@@ -128,7 +132,15 @@ To enable sending, an administrator must separately configure SMTP for a
 mailbox, select a Safe Send policy and set `MAILBRIDGE_ALLOW_SEND=true`.
 Draft-only mode requires preview, validation, a short-lived one-time confirmation
 and the exact draft version. Direct send remains rejected unless that mailbox
-explicitly uses `direct_allowed`.
+explicitly uses `direct_allowed`. Outgoing attachments are encrypted with the
+draft and limited to 10 files, 10 MiB each and 18 MiB total; executable file
+extensions are rejected.
+
+A copy in the mailbox's Sent folder is independently fail-closed. It requires
+`MAILBRIDGE_SAVE_SENT_COPY=true` and the exact mailbox ID in
+`MAILBRIDGE_SENT_COPY_MAILBOX_IDS`. The receipt distinguishes SMTP acceptance
+from `provider_saved`, `imap_appended`, `failed` and disabled states; it never
+claims recipient delivery or read status.
 
 See [Safe Send](docs/SAFE_SEND.md). Enabling Safe Send creates an external side
 effect: the operator remains responsible for recipients, content, authorization

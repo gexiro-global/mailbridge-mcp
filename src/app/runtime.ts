@@ -49,6 +49,8 @@ export async function createPrivateAppRuntime(
     store,
     messageIdHmac,
     process.env.MAILBRIDGE_ALLOW_SEND === "true",
+    process.env.MAILBRIDGE_SAVE_SENT_COPY === "true",
+    parseMailboxIdAllowlist(process.env.MAILBRIDGE_SENT_COPY_MAILBOX_IDS),
   );
   master.fill(0);
   userHmac.fill(0);
@@ -61,6 +63,17 @@ export async function createPrivateAppRuntime(
     userKeys,
     close: () => store.close(),
   };
+}
+
+function parseMailboxIdAllowlist(value: string | undefined): ReadonlySet<string> {
+  const ids = (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (ids.some((id) => !/^mbx_[a-z0-9_]{1,120}$/i.test(id))) {
+    throw new Error("Sent-copy mailbox allowlist is invalid");
+  }
+  return new Set(ids);
 }
 
 function decodeKey(encoded: string, label: string, exact32: boolean): Buffer {

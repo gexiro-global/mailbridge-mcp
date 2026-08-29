@@ -49,7 +49,18 @@ describe("Safe Send MCP end-to-end", () => {
       subject: "Synthetic Safe Send E2E",
       text_body: "No real email is sent.",
     } });
-    const draft = (created.structuredContent as { draft: { draft_id: string; version: number } }).draft;
+    let draft = (created.structuredContent as { draft: { draft_id: string; version: number } }).draft;
+
+    const attached = await client.callTool({ name: "add_draft_attachment", arguments: {
+      draft_id: draft.draft_id,
+      expected_version: draft.version,
+      filename: "synthetic.txt",
+      mime_type: "text/plain",
+      content_base64: Buffer.from("synthetic attachment", "utf8").toString("base64"),
+    } });
+    draft = (attached.structuredContent as { draft: { draft_id: string; version: number; attachments: unknown[] } }).draft;
+    expect(draft.attachments).toHaveLength(1);
+    expect(JSON.stringify(attached.structuredContent)).not.toContain(Buffer.from("synthetic attachment", "utf8").toString("base64"));
 
     const opened = await client.callTool({ name: "open_mail_composer", arguments: { draft_id: draft.draft_id } });
     expect(opened.structuredContent).toMatchObject({ draft: { draft_id: draft.draft_id }, policy: { send_mode: "draft_only" } });
@@ -69,14 +80,19 @@ describe("Safe Send MCP end-to-end", () => {
       replayed: false,
     });
     expect(transport.sent).toBe(1);
+    expect(transport.lastPayload?.attachments).toEqual([
+      expect.objectContaining({ filename: "synthetic.txt", mime_type: "text/plain", size: 20 }),
+    ]);
   });
 });
 
 class FakeTransport implements MailTransport {
   sent = 0;
+  lastPayload: DraftPayload | null = null;
 
   async send(mailbox: MailboxConfig, payload: DraftPayload, messageId: string): Promise<SendReceipt> {
     this.sent += 1;
+    this.lastPayload = payload;
     return {
       mailbox_id: mailbox.id,
       message_id: messageId,

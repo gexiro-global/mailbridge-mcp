@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import type { CredentialEnvelopeCipher } from "./crypto.js";
 import type {
+  DraftAttachment,
   DraftValidation,
   DraftPayload,
   MailDraftView,
@@ -401,22 +402,31 @@ export class MailboxStore {
     const row = this.#db.prepare("SELECT * FROM mail_drafts WHERE user_key = ? AND draft_id = ?")
       .get(userKey, draftId) as DraftRow | undefined;
     if (!row) throw new Error("Draft not found");
-    const payload = parseDraftPayload(this.cipher.decryptJson(
-      userKey,
-      row.draft_id,
-      "draft-v1",
-      parseEnvelope(row.encrypted_payload),
-    ));
+    const payload = this.getDraftPayload(userKey, draftId);
+    const { attachments, ...message } = payload;
     return {
       draft_id: row.draft_id,
       version: Number(row.version),
-      ...payload,
+      ...message,
+      attachments: attachments.map(({ content_base64: _content, ...metadata }) => metadata),
       status: row.status,
       created_at: row.created_at,
       updated_at: row.updated_at,
       sent_at: row.sent_at,
       message_id: row.message_id,
     };
+  }
+
+  getDraftPayload(userKey: string, draftId: string): DraftPayload {
+    const row = this.#db.prepare("SELECT * FROM mail_drafts WHERE user_key = ? AND draft_id = ?")
+      .get(userKey, draftId) as DraftRow | undefined;
+    if (!row) throw new Error("Draft not found");
+    return parseDraftPayload(this.cipher.decryptJson(
+      userKey,
+      row.draft_id,
+      "draft-v1",
+      parseEnvelope(row.encrypted_payload),
+    ));
   }
 
   updateDraft(userKey: string, draftId: string, expectedVersion: number, payload: DraftPayload): MailDraftView {
@@ -436,6 +446,43 @@ export class MailboxStore {
       this.#audit(userKey, current.mailbox_id, "MAIL_DRAFT_UPDATED", "PASS", now);
     });
     return this.getDraft(userKey, draftId);
+  }
+
+  addDraftAttachment(
+    userKey: string,
+    draftId: string,
+    expectedVersion: number,
+    attachment: DraftAttachment,
+  ): MailDraftView {
+    const payload = this.getDraftPayload(userKey, draftId);
+    if (payload.attachments.some((item) => item.attachment_id === attachment.attachment_id)) {
+      throw new MailBridgeError("Attachment identifier already exists", "ATTACHMENT_CONFLICT");
+    }
+    const updated = { ...payload, attachments: [...payload.attachments, attachment] };
+    const view = this.updateDraft(userKey, draftId, expectedVersion, updated);
+    this.#audit(userKey, payload.mailbox_id, "MAIL_DRAFT_ATTACHMENT_ADDED", "PASS", new Date().toISOString());
+    return view;
+  }
+
+  removeDraftAttachment(
+    userKey: string,
+    draftId: string,
+    expectedVersion: number,
+    attachmentId: string,
+  ): MailDraftView {
+    const payload = this.getDraftPayload(userKey, draftId);
+    const updatedAttachments = payload.attachments.filter((item) => item.attachment_id !== attachmentId);
+    if (updatedAttachments.length === payload.attachments.length) {
+      throw new MailBridgeError("Attachment not found on this draft", "ATTACHMENT_NOT_FOUND");
+    }
+    const view = this.updateDraft(
+      userKey,
+      draftId,
+      expectedVersion,
+      { ...payload, attachments: updatedAttachments },
+    );
+    this.#audit(userKey, payload.mailbox_id, "MAIL_DRAFT_ATTACHMENT_REMOVED", "PASS", new Date().toISOString());
+    return view;
   }
 
   markDraftSent(userKey: string, draftId: string, receipt: SendReceipt): MailDraftView {
@@ -969,6 +1016,15 @@ function parseSendReceipt(value: unknown): SendReceipt {
     !Array.isArray(receipt.rejected) || !receipt.rejected.every((item) => typeof item === "string") ||
     typeof receipt.sent_at !== "string"
   ) throw new Error("Stored send receipt is invalid");
+  const sentCopy = receipt.sent_copy;
+  if (sentCopy === undefined) {
+    receipt.sent_copy = { state: "legacy_untracked", folder: null, attempts: 0, error_code: null };
+  } else if (
+    !["disabled", "not_applicable", "provider_saved", "imap_appended", "failed", "legacy_untracked"].includes(sentCopy.state) ||
+    !(sentCopy.folder === null || typeof sentCopy.folder === "string") ||
+    !Number.isSafeInteger(sentCopy.attempts) || sentCopy.attempts < 0 ||
+    !(sentCopy.error_code === null || typeof sentCopy.error_code === "string")
+  ) throw new Error("Stored Sent-copy receipt is invalid");
   return receipt as SendReceipt;
 }
 
@@ -997,5 +1053,15 @@ function parseDraftPayload(value: unknown): DraftPayload {
     !(draft.in_reply_to === null || typeof draft.in_reply_to === "string") ||
     !Array.isArray(draft.references) || !draft.references.every((item) => typeof item === "string")
   ) throw new Error("Stored draft payload is invalid");
-  return draft as DraftPayload;
+  const attachments = draft.attachments ?? [];
+  if (!Array.isArray(attachments) || !attachments.every((item) =>
+    item && typeof item === "object" &&
+    typeof item.attachment_id === "string" &&
+    typeof item.filename === "string" &&
+    typeof item.mime_type === "string" &&
+    Number.isSafeInteger(item.size) && item.size >= 0 &&
+    typeof item.sha256 === "string" &&
+    typeof item.content_base64 === "string"
+  )) throw new Error("Stored draft attachment payload is invalid");
+  return { ...(draft as DraftPayload), attachments };
 }

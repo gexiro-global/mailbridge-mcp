@@ -11,6 +11,15 @@ describe("configuration", () => {
     expect(MailBridgeConfigSchema.parse(testConfig).mailboxes).toHaveLength(2);
   });
 
+  it("allows a bounded request envelope large enough for a 10 MiB base64 attachment", () => {
+    const attachmentReady = structuredClone(testConfig);
+    attachmentReady.server.request_max_bytes = 16 * 1024 * 1024;
+    expect(MailBridgeConfigSchema.parse(attachmentReady).server.request_max_bytes).toBe(16 * 1024 * 1024);
+
+    attachmentReady.server.request_max_bytes = 20 * 1024 * 1024 + 1;
+    expect(() => MailBridgeConfigSchema.parse(attachmentReady)).toThrow();
+  });
+
   it("rejects duplicate mailbox ids", () => {
     const duplicate = structuredClone(testConfig);
     duplicate.mailboxes.push(structuredClone(duplicate.mailboxes[0]!));

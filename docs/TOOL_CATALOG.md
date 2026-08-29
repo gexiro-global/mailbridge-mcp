@@ -13,13 +13,16 @@ The mailbox Settings API is not a mail-message tool. User-approved add, replace,
 disable and delete operations write encrypted connector configuration and
 require the separate `mail.settings.write` OAuth scope.
 
-## Optional Safe Send surface — 12 tools
+## Optional Safe Send surface — 14 tools
 
 `open_mail_composer`, `create_draft`, `reply_draft`, `update_draft`,
-`get_send_policy`, `validate_draft`, `prepare_draft_send`, `send_draft`,
-`send_email`, `reply_email`, `get_send_status`, `list_send_audit`.
+`add_draft_attachment`, `remove_draft_attachment`, `get_send_policy`,
+`validate_draft`, `prepare_draft_send`, `send_draft`, `send_email`,
+`reply_email`, `get_send_status`, `list_send_audit`.
 
 The Safe Send tools are not registered unless the process-wide send gate is on.
-Draft and policy tools are non-destructive writes; SMTP submission tools are
-destructive/open-world and require `mail.send`. Server policy remains
-authoritative even when a client asks to bypass it.
+Draft and policy tools are non-destructive writes; attachment tools modify only
+the encrypted local draft and return metadata without echoing file bytes. SMTP
+submission tools are destructive/open-world and require `mail.send`. Server
+policy remains authoritative even when a client asks to bypass it. Optional
+Sent-copy persistence is an internal post-acceptance component, not an MCP tool.
