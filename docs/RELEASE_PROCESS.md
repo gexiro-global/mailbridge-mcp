@@ -27,11 +27,14 @@ For version `X.Y.Z`, the expected release assets are:
 - `mailbridge-mcp-vX.Y.Z-runtime-npm.tgz`
 - `mailbridge-mcp-vX.Y.Z-source.tar.gz`
 - `mailbridge-mcp-vX.Y.Z-sbom.cdx.json`
+- `mailbridge-mcp-vX.Y.Z-sbom.spdx.json`
 - `SHA256SUMS`
 
 `SHA256SUMS` uses basename-only paths so verification works after downloading
-the files into one clean directory. The workflow generates provenance
-attestations for the release artifacts.
+the files into one clean directory. The workflow validates CycloneDX with the
+digest-pinned official CycloneDX CLI and SPDX with the checksum-pinned official
+SPDX Java tools. It generates provenance attestations for all release artifacts
+and a separate SPDX SBOM attestation for the runtime archive.
 
 The publish job targets the GitHub environment `github-release`. A repository
 administrator must configure that environment with required reviewers and any

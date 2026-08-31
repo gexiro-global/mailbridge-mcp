@@ -173,6 +173,8 @@ and provider limits.
 - [Backup and restore](docs/BACKUP_RESTORE.md)
 - [Release process](docs/RELEASE_PROCESS.md)
 - [Security policy](SECURITY.md) and [threat model](THREAT_MODEL.md)
+- [Security and trust signals](docs/SECURITY-TRUST.md)
+- [Governance](GOVERNANCE.md) and [maintainers](MAINTAINERS.md)
 - [Privacy](PRIVACY.md), [support](SUPPORT.md) and [terms](TERMS.md)
 - [Public launch readiness](docs/PUBLIC_LAUNCH_READINESS.md)
 
