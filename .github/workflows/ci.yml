@@ -33,10 +33,15 @@ jobs:
         run: npm run check
       - name: Validate package contents
         run: npm pack --dry-run --ignore-scripts
-      - name: Generate and validate CycloneDX SBOM
+      - name: Generate and validate SBOMs
         shell: bash
         run: |
           npm sbom --sbom-format cyclonedx > mailbridge-sbom.cdx.json
-          node -e "JSON.parse(require('node:fs').readFileSync('mailbridge-sbom.cdx.json','utf8'))"
+          npm sbom --sbom-format spdx > mailbridge-sbom.spdx.json
+          node scripts/normalize-spdx.mjs --input mailbridge-sbom.spdx.json
+          node scripts/validate-sboms.mjs \
+            --cyclonedx mailbridge-sbom.cdx.json \
+            --spdx mailbridge-sbom.spdx.json \
+            --version "$(node --input-type=commonjs -p "require('./package.json').version")"
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high

@@ -32,6 +32,12 @@ jobs:
           node-version: "24"
           cache: npm
 
+      - name: Set up Java for SPDX validation
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
       - name: Verify tag, package version, and main ancestry
         shell: bash
         run: |
@@ -67,7 +73,8 @@ jobs:
 
           runtime_name="mailbridge-mcp-${GITHUB_REF_NAME}-runtime-npm.tgz"
           source_name="mailbridge-mcp-${GITHUB_REF_NAME}-source.tar.gz"
-          sbom_name="mailbridge-mcp-${GITHUB_REF_NAME}-sbom.cdx.json"
+          cyclonedx_name="mailbridge-mcp-${GITHUB_REF_NAME}-sbom.cdx.json"
+          spdx_name="mailbridge-mcp-${GITHUB_REF_NAME}-sbom.spdx.json"
 
           package_file="$(npm pack --ignore-scripts --silent)"
           mv -- "${package_file}" "release/${runtime_name}"
@@ -76,13 +83,36 @@ jobs:
             --prefix="mailbridge-mcp-${GITHUB_REF_NAME}-source/" \
             --output="release/${source_name}" \
             "${GITHUB_SHA}"
-          npm sbom --sbom-format cyclonedx > "release/${sbom_name}"
+          npm sbom --sbom-format cyclonedx > "release/${cyclonedx_name}"
+          npm sbom --sbom-format spdx > "release/${spdx_name}"
+          node scripts/normalize-spdx.mjs --input "release/${spdx_name}"
+
+          node scripts/validate-sboms.mjs \
+            --cyclonedx "release/${cyclonedx_name}" \
+            --spdx "release/${spdx_name}" \
+            --version "$(node --input-type=commonjs -p "require('./package.json').version")"
 
           (
             cd release
-            sha256sum "${runtime_name}" "${source_name}" "${sbom_name}" > SHA256SUMS
+            sha256sum "${runtime_name}" "${source_name}" "${cyclonedx_name}" "${spdx_name}" > SHA256SUMS
             sha256sum -c SHA256SUMS
           )
+
+      - name: Validate SBOM specifications
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node --input-type=commonjs -p "require('./package.json').version")"
+          docker run --rm --volume "$PWD/release:/work:ro" \
+            cyclonedx/cyclonedx-cli@sha256:252c2e26f468c25fea1e63ecde1bc3198ad6e9dbb57f5ed3236bddcb2281b3a7 \
+            validate \
+            --input-file "/work/mailbridge-mcp-v${version}-sbom.cdx.json" \
+            --input-version v1_5 \
+            --fail-on-errors
+          curl --fail --location --retry 3 --output /tmp/spdx-tools.jar \
+            https://repo1.maven.org/maven2/org/spdx/tools-java/2.0.7/tools-java-2.0.7-jar-with-dependencies.jar
+          echo "bf99a8b2ffbea238c1451c6b4be568870f18b4aac93d0dbff755f2b0b7ce43f3  /tmp/spdx-tools.jar" | sha256sum -c -
+          java -jar /tmp/spdx-tools.jar Verify "release/mailbridge-mcp-v${version}-sbom.spdx.json"
 
       - name: Verify exact artifacts as an external receiver
         run: >-
@@ -111,6 +141,7 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+      artifact-metadata: write
     steps:
       - name: Re-check release identity after environment approval
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -144,13 +175,20 @@ jobs:
           )
 
       - name: Attest release provenance
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
           subject-path: |
             release/mailbridge-mcp-${{ github.ref_name }}-runtime-npm.tgz
             release/mailbridge-mcp-${{ github.ref_name }}-source.tar.gz
             release/mailbridge-mcp-${{ github.ref_name }}-sbom.cdx.json
+            release/mailbridge-mcp-${{ github.ref_name }}-sbom.spdx.json
             release/SHA256SUMS
+
+      - name: Attest runtime SBOM
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: release/mailbridge-mcp-${{ github.ref_name }}-runtime-npm.tgz
+          sbom-path: release/mailbridge-mcp-${{ github.ref_name }}-sbom.spdx.json
 
       - name: Create GitHub release
         env:
@@ -162,6 +200,7 @@ jobs:
             "release/mailbridge-mcp-${GITHUB_REF_NAME}-runtime-npm.tgz" \
             "release/mailbridge-mcp-${GITHUB_REF_NAME}-source.tar.gz" \
             "release/mailbridge-mcp-${GITHUB_REF_NAME}-sbom.cdx.json" \
+            "release/mailbridge-mcp-${GITHUB_REF_NAME}-sbom.spdx.json" \
             "release/SHA256SUMS" \
             --verify-tag \
             --generate-notes \

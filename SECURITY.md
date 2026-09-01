@@ -13,6 +13,18 @@ Never open a public issue containing
 credentials, tokens, private keys, real email content, mailbox addresses,
 production hostnames or unredacted logs.
 
+Maintainers aim to acknowledge a complete private report within seven calendar
+days, but this is a community-supported project and the target is not an uptime
+or remediation guarantee. Reports are triaged by reproducibility, affected
+versions, exploitability, impact, and safe deployment assumptions. Remediation
+and release timing depend on severity and complexity; the reporter receives
+status updates when practical.
+
+Keep technical details private until a maintainer confirms that a fix or safe
+disclosure plan is ready. The project supports coordinated disclosure and will
+credit reporters who want public credit, but it does not promise a bounty,
+embargo deadline, or acceptance of unsafe testing against third-party systems.
+
 ## Security invariants
 
 - IMAP reads use `EXAMINE` and `BODY.PEEK`; no read tool changes flags.

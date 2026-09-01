@@ -1,0 +1,72 @@
+header:
+  schema-version: 2.2.0
+  last-updated: '2026-08-31'
+  last-reviewed: '2026-08-31'
+  url: https://raw.githubusercontent.com/gexiro-global/mailbridge-mcp/main/security-insights.yml
+  comment: |
+    This is a single-repository Security Insights file. It reports repository
+    practices and does not claim an external audit or certification.
+
+project:
+  name: MailBridge MCP
+  homepage: https://github.com/gexiro-global/mailbridge-mcp
+  administrators:
+    - name: dzeusking-dev
+      affiliation: Gexiro Global Enterprises Ltd.
+      social: https://github.com/dzeusking-dev
+      primary: true
+  documentation:
+    quickstart-guide: https://github.com/gexiro-global/mailbridge-mcp#choose-a-deployment-path
+    detailed-guide: https://github.com/gexiro-global/mailbridge-mcp/tree/main/docs
+    code-of-conduct: https://github.com/gexiro-global/mailbridge-mcp/blob/main/CODE_OF_CONDUCT.md
+    release-process: https://github.com/gexiro-global/mailbridge-mcp/blob/main/docs/RELEASE_PROCESS.md
+    support-policy: https://github.com/gexiro-global/mailbridge-mcp/blob/main/SUPPORT.md
+    signature-verification: https://github.com/gexiro-global/mailbridge-mcp/blob/main/docs/RELEASE_VERIFICATION.md
+  repositories:
+    - name: mailbridge-mcp
+      url: https://github.com/gexiro-global/mailbridge-mcp
+      comment: Canonical source and release repository.
+  vulnerability-reporting:
+    reports-accepted: true
+    bug-bounty-available: false
+    policy: https://github.com/gexiro-global/mailbridge-mcp/blob/main/SECURITY.md
+    comment: Use GitHub private vulnerability reporting; do not open a public security issue.
+
+repository:
+  url: https://github.com/gexiro-global/mailbridge-mcp
+  status: active
+  accepts-change-request: true
+  accepts-automated-change-request: true
+  no-third-party-packages: false
+  core-team:
+    - name: dzeusking-dev
+      affiliation: Gexiro Global Enterprises Ltd.
+      social: https://github.com/dzeusking-dev
+      primary: true
+  documentation:
+    contributing-guide: https://github.com/gexiro-global/mailbridge-mcp/blob/main/CONTRIBUTING.md
+    review-policy: https://github.com/gexiro-global/mailbridge-mcp/blob/main/GOVERNANCE.md
+    security-policy: https://github.com/gexiro-global/mailbridge-mcp/blob/main/SECURITY.md
+    governance: https://github.com/gexiro-global/mailbridge-mcp/blob/main/GOVERNANCE.md
+    dependency-management-policy: https://github.com/gexiro-global/mailbridge-mcp/blob/main/docs/SECURITY-TRUST.md#dependencies-and-analysis
+  license:
+    url: https://github.com/gexiro-global/mailbridge-mcp/blob/main/LICENSE
+    expression: Apache-2.0
+  release:
+    changelog: https://github.com/gexiro-global/mailbridge-mcp/blob/main/CHANGELOG.md
+    automated-pipeline: true
+    distribution-points:
+      - uri: https://github.com/gexiro-global/mailbridge-mcp/releases
+        comment: Versioned GitHub release assets.
+    attestations:
+      - name: GitHub build provenance
+        predicate-uri: https://slsa.dev/provenance/v1
+        location: https://github.com/gexiro-global/mailbridge-mcp/attestations
+        comment: Verify the selected release asset against this repository and tag.
+  security:
+    assessments:
+      self:
+        comment: |
+          Maintainers use the published threat model, automated tests, CodeQL,
+          dependency review, secret scanning, and release receiver checks. No
+          independent third-party security audit is claimed.

@@ -20,7 +20,8 @@ if (!/^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(tag)) {
 const artifactNames = {
   runtime: `mailbridge-mcp-${tag}-runtime-npm.tgz`,
   source: `mailbridge-mcp-${tag}-source.tar.gz`,
-  sbom: `mailbridge-mcp-${tag}-sbom.cdx.json`,
+  cyclonedx: `mailbridge-mcp-${tag}-sbom.cdx.json`,
+  spdx: `mailbridge-mcp-${tag}-sbom.spdx.json`,
 };
 const artifactPaths = Object.fromEntries(
   Object.entries(artifactNames).map(([key, value]) => [key, join(releaseDirectory, value)]),
@@ -34,7 +35,8 @@ try {
   }
 
   await verifyChecksums(checksumPath, artifactNames, artifactPaths);
-  await verifySbom(artifactPaths.sbom, expectedVersion);
+  await verifyCycloneDx(artifactPaths.cyclonedx, expectedVersion);
+  await verifySpdx(artifactPaths.spdx, expectedVersion);
   await verifyRuntimePackage(artifactPaths.runtime, expectedVersion, temporaryRoot);
   await verifySourceArchive(artifactPaths.source, expectedVersion, tag, temporaryRoot);
 
@@ -45,6 +47,8 @@ try {
         tag,
         runtime_artifact: artifactNames.runtime,
         source_artifact: artifactNames.source,
+        sbom_cyclonedx: artifactNames.cyclonedx,
+        sbom_spdx: artifactNames.spdx,
         checksums: "MATCH",
         receiver_install: "PASS",
         source_check: "PASS",
@@ -110,7 +114,7 @@ async function assertNoPrivateRuntimeEntries(installedRoot) {
   if (forbidden.length) fail(`Runtime package contains prohibited private entries: ${forbidden.join(", ")}`);
 }
 
-async function verifySbom(sbomPath, expectedVersion) {
+async function verifyCycloneDx(sbomPath, expectedVersion) {
   let sbom;
   try {
     sbom = JSON.parse(await readFile(sbomPath, "utf8"));
@@ -119,6 +123,23 @@ async function verifySbom(sbomPath, expectedVersion) {
   }
   if (sbom.bomFormat !== "CycloneDX" || sbom.metadata?.component?.version !== expectedVersion) {
     fail("SBOM is not a CycloneDX document for the released package version.");
+  }
+}
+
+async function verifySpdx(sbomPath, expectedVersion) {
+  let sbom;
+  try {
+    sbom = JSON.parse(await readFile(sbomPath, "utf8"));
+  } catch {
+    fail("SPDX SBOM is not valid JSON.");
+  }
+  const rootPackage = Array.isArray(sbom.packages)
+    ? sbom.packages.find(
+        (entry) => entry.name === "@gexiro/mailbridge-mcp" && entry.versionInfo === expectedVersion,
+      )
+    : undefined;
+  if (sbom.spdxVersion !== "SPDX-2.3" || !rootPackage) {
+    fail("SBOM is not an SPDX 2.3 document for the released package version.");
   }
 }
 
