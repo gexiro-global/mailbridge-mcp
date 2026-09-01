@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { AdminAuditStore } from "../src/admin/audit.js";
 import { AdminConfigStore } from "../src/admin/configStore.js";
 import { startAdminPanel, type AdminRuntime } from "../src/admin/server.js";
+import { AdminSessions, hashAdminPassword } from "../src/admin/auth.js";
 import { FileSecretProvider } from "../src/config/secrets.js";
 import { testConfig } from "./fixtures.js";
 
@@ -15,6 +16,19 @@ const runtimes: AdminRuntime[] = [];
 afterEach(async () => Promise.all(runtimes.splice(0).map((runtime) => runtime.close())));
 
 describe("private admin panel", () => {
+  it("stores only salted scrypt password hashes and rejects plaintext secrets", async () => {
+    const password = "correct horse battery staple";
+    const first = await hashAdminPassword(password);
+    const second = await hashAdminPassword(password);
+    expect(first).toMatch(/^scrypt\$16384\$8\$1\$/);
+    expect(first).not.toContain(password);
+    expect(second).not.toBe(first);
+    const sessions = new AdminSessions("operator", first, "0123456789abcdef0123456789abcdef", 60_000);
+    await expect(sessions.verifyCredentials("operator", password)).resolves.toBe(true);
+    await expect(sessions.verifyCredentials("operator", "wrong password value")).resolves.toBe(false);
+    expect(() => new AdminSessions("operator", password, "0123456789abcdef0123456789abcdef", 60_000)).toThrow(/scrypt hash/);
+  });
+
   it("persists a targeted mailbox configuration change with schema validation", async () => {
     const directory = await mkdtemp(join(tmpdir(), "mailbridge-admin-config-"));
     const configPath = join(directory, "mailboxes.yaml");
@@ -33,7 +47,7 @@ describe("private admin panel", () => {
     const configPath = join(directory, "mailboxes.yaml");
     await writeFile(configPath, stringify(config), "utf8");
     const secrets = new FileSecretProvider(join(directory, "secrets"));
-    await secrets.replace(config.panel.password_secret, "correct horse battery staple");
+    await secrets.replace(config.panel.password_secret, await hashAdminPassword("correct horse battery staple"));
     await secrets.replace(config.panel.session_key_secret, "0123456789abcdef0123456789abcdef");
     const runtime = await startAdminPanel(configPath, { secrets, audit: new AdminAuditStore(config.panel.audit_log_path), port: 0 });
     runtimes.push(runtime);

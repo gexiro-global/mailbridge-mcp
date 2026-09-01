@@ -87,4 +87,16 @@ and reports its result independently from SMTP acceptance.
 `panel.enabled=false` is the default. The panel is not required for normal Apps
 SDK configuration, must never be exposed publicly and may bind only to loopback.
 Enabling it adds password and session-key secret references that the production
-doctor must find.
+doctor must find. The password secret must contain a salted scrypt hash, never
+the operator password itself. Generate it from a built checkout without putting
+the password in command arguments:
+
+```bash
+read -r -s MAILBRIDGE_ADMIN_PASSWORD
+printf '%s' "$MAILBRIDGE_ADMIN_PASSWORD" | node dist/cli.js admin hash-password
+unset MAILBRIDGE_ADMIN_PASSWORD
+```
+
+Store only the returned `password_hash` value in the referenced secret file.
+MailBridge fails closed when the secret contains plaintext or an unsupported
+hash format.
