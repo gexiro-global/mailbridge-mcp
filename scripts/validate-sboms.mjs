@@ -13,12 +13,17 @@ const cyclonedxText = await readFile(cyclonedxPath, "utf8");
 const spdxText = await readFile(spdxPath, "utf8");
 const cyclonedx = parseJson(cyclonedxText, "CycloneDX SBOM");
 const spdx = parseJson(spdxText, "SPDX SBOM");
+const cyclonedxRoot = cyclonedx.metadata?.component;
+const expectedCycloneDxBomRef = `@gexiro/mailbridge-mcp@${expectedVersion}`;
+const expectedCycloneDxPurl = `pkg:npm/%40gexiro/mailbridge-mcp@${expectedVersion}`;
 
 if (
   cyclonedx.bomFormat !== "CycloneDX" ||
   cyclonedx.specVersion !== "1.5" ||
-  cyclonedx.metadata?.component?.name !== "@gexiro/mailbridge-mcp" ||
-  cyclonedx.metadata?.component?.version !== expectedVersion ||
+  !["@gexiro/mailbridge-mcp", "mailbridge-mcp"].includes(cyclonedxRoot?.name) ||
+  cyclonedxRoot?.version !== expectedVersion ||
+  cyclonedxRoot?.["bom-ref"] !== expectedCycloneDxBomRef ||
+  cyclonedxRoot?.purl !== expectedCycloneDxPurl ||
   !Array.isArray(cyclonedx.components) ||
   cyclonedx.components.length === 0 ||
   !Array.isArray(cyclonedx.dependencies)
