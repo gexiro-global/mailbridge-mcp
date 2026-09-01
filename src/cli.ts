@@ -8,6 +8,7 @@ import { loadConfig } from "./config/load.js";
 import { requiredSecretReferences } from "./config/requiredSecrets.js";
 import { MailBridgeConfigSchema, type MailBridgeConfig } from "./config/schema.js";
 import { FileSecretProvider } from "./config/secrets.js";
+import { hashAdminPassword } from "./admin/auth.js";
 import { MAILBRIDGE_VERSION } from "./version.js";
 
 const program = new Command()
@@ -18,6 +19,16 @@ const program = new Command()
   .option("--environment <name>", "runtime safety profile: development or production", process.env.NODE_ENV ?? "development");
 
 const mailbox = program.command("mailbox").description("manage mailbox registry entries");
+
+program.command("admin").description("private admin panel operations")
+  .command("hash-password").description("read an admin password from stdin and print a storage-safe scrypt hash")
+  .action(async () => {
+    if (process.stdin.isTTY) throw new Error("Admin password must be supplied through stdin");
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const password = Buffer.concat(chunks).toString("utf8").replace(/\r?\n$/, "");
+    output({ password_hash: await hashAdminPassword(password) });
+  });
 
 mailbox.command("list").description("list safe mailbox metadata").action(async () => {
   const config = await loadConfig(selectedConfig(), selectedEnvironment());
