@@ -1,6 +1,6 @@
 # Security and trust signals
 
-Last reviewed: 2026-08-31.
+Last reviewed: 2026-09-04.
 
 This page is an evidence index, not a certification. A badge, score, workflow,
 SBOM, or attestation does not prove that software is vulnerability-free.
@@ -28,8 +28,11 @@ GitHub secret scanning, generic-pattern scanning, validity checks, push
 protection, Dependabot alerts, and Dependabot security updates are enabled.
 
 The OpenSSF Scorecard workflow publishes signed results to the public Scorecard
-API after a successful run on the default branch. Until such a result exists,
-the project does not claim a score or display a Scorecard badge.
+API after a successful run on the default branch. The official public result
+for commit `5fe4b268c39422413140ac5164e885d5ba8bc105`, generated on 2026-09-04,
+is [6.4 out of 10](https://securityscorecards.dev/viewer/?uri=github.com/gexiro-global/mailbridge-mcp).
+The badge reflects an automated, point-in-time repository posture assessment;
+it is not a certification or proof that the software is vulnerability-free.
 
 ## Release integrity
 

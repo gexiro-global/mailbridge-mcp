@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/gexiro-global/mailbridge-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/gexiro-global/mailbridge-mcp/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/gexiro-global/mailbridge-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/gexiro-global/mailbridge-mcp/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/gexiro-global/mailbridge-mcp/badge)](https://securityscorecards.dev/viewer/?uri=github.com/gexiro-global/mailbridge-mcp)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-339933?logo=node.js&logoColor=white)](package.json)
 
