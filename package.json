@@ -80,7 +80,7 @@
     "commander": "15.0.0",
     "express": "5.2.1",
     "express-rate-limit": "8.6.2",
-    "imapflow": "1.4.7",
+    "imapflow": "1.7.7",
     "jose": "6.2.10",
     "mailparser": "3.9.16",
     "nodemailer": "9.0.5",
