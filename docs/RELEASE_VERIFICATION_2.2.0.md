@@ -16,7 +16,8 @@ send transport; it did not connect to operator mailboxes or send real email.
 | Packed-package dry run | PASS — 220 files |
 | Read-only synthetic smoke | PASS — 15 mail-read tools, separate settings opener, SMTP off |
 | Safe Send synthetic smoke | PASS — 30 tools, one synthetic submission, 0 real SMTP connections |
-| Docker production image build | PASS — `mailbridge-public:2.2.0-verify` |
+| Docker production image build | PASS — patched digest-pinned Chainguard runtime |
+| Container vulnerability scan | PASS — 0 High / 0 Critical with Trivy |
 | Runtime image identity | PASS — UID/GID 10001:10001, Node runtime reports 2.2.0 |
 | Private mailbox identifiers or credentials in the change | 0 observed |
 | Real mailbox or SMTP use | 0 |

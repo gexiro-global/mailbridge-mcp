@@ -12,7 +12,7 @@ RUN npm run build \
     && npm cache clean --force
 RUN mkdir -p /app/runtime/data
 
-FROM cgr.dev/chainguard/node:latest@sha256:3cf2a28e10607bd6758a4e56fbd5580ab9d041f2126e4e79ae50af29f9317f54 AS runtime
+FROM cgr.dev/chainguard/node:latest@sha256:5d6d6287abf176121b173a0337a888900f2909f0ac06e4e096138be4898a8f92 AS runtime
 ENV NODE_ENV=production \
     MAILBRIDGE_CONFIG=/app/config/mailboxes.production.yaml \
     MAILBRIDGE_SECRET_DIR=/run/secrets/mailbridge \
