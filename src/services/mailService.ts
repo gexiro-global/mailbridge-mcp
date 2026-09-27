@@ -21,6 +21,8 @@ import { findCrossBrandFindings } from "../security/crossBrand.js";
 import { boundedText, sanitizeEmailHtml } from "../security/content.js";
 import { StableIdCodec, type DecodedMessageLocator } from "../security/stableId.js";
 import { Semaphore, withTimeout } from "../util/concurrency.js";
+import { dedupeSummaries, parseKnowledgeQuery, selectScopedMailboxes, type KnowledgeSearchOptions } from "./knowledgeScope.js";
+import { summarizeAuthentication } from "./messageAuth.js";
 
 interface ConnectionState {
   status: "unknown" | "connected" | "error";
@@ -34,11 +36,14 @@ export interface FetchMessageOptions {
   max_body_chars: number;
 }
 
+const FOLDER_CACHE_TTL_MS = 300_000;
+
 export class MailService {
   readonly registry: MailboxRegistry;
   readonly #mailboxSemaphores = new Map<string, Semaphore>();
   readonly #fanout = new Semaphore(4);
   readonly #connectionState = new Map<string, ConnectionState>();
+  readonly #folderCache = new Map<string, { folders: string[]; expires_at: number }>();
 
   constructor(
     readonly config: MailBridgeConfig,
@@ -115,16 +120,50 @@ export class MailService {
     });
   }
 
-  async searchKnowledge(query: string) {
-    const mailboxIds = this.registry.list().filter((mailbox) => mailbox.enabled).map((mailbox) => mailbox.id);
-    if (mailboxIds.length === 0) return { results: [] as Array<{ id: string; title: string; url: string }> };
-    const searched = await this.searchMessages({ mailbox_ids: mailboxIds, free_text: query, limit: 50 });
+  async searchKnowledge(query: string, options: KnowledgeSearchOptions = {}) {
+    const parsed = parseKnowledgeQuery(query);
+    const explicitScopes = options.mailbox_ids ?? [];
+    const inlineScopes = parsed.scopes;
+    const enabled = this.registry.list().filter((mailbox) => mailbox.enabled);
+    const resolveScopes = (scopes: string[]) => {
+      const groups = scopes.map((scope) => selectScopedMailboxes(enabled, [scope]));
+      if (groups.some((group) => group.length === 0)) {
+        throw new MailBridgeError("No enabled mailbox matches the requested scope", "MAILBOX_SCOPE_NOT_FOUND");
+      }
+      const ids = new Set(groups.flat().map((mailbox) => mailbox.id));
+      return enabled.filter((mailbox) => ids.has(mailbox.id));
+    };
+    const explicit = explicitScopes.length ? resolveScopes(explicitScopes) : null;
+    const inline = inlineScopes.length ? resolveScopes(inlineScopes) : null;
+    const scoped = explicit && inline
+      ? explicit.filter((mailbox) => inline.some((candidate) => candidate.id === mailbox.id))
+      : explicit ?? inline ?? enabled;
+    if ((explicit || inline) && scoped.length === 0) {
+      throw new MailBridgeError("Conflicting mailbox scopes", "MAILBOX_SCOPE_NOT_FOUND");
+    }
+    if (scoped.length === 0) return {
+      results: [] as Array<{ id: string; title: string; url: string }>,
+      partial_failures: [] as PartialFailure[],
+      truncated: false,
+    };
+    const searched = await this.searchMessages({
+      mailbox_ids: scoped.map((mailbox) => mailbox.id),
+      free_text: parsed.free_text,
+      limit: options.limit ?? 50,
+      ...(options.folders?.length ? { folders: unique(options.folders) } : {}),
+      ...(options.after ? { after: options.after } : {}),
+      ...(options.before ? { before: options.before } : {}),
+      ...(options.unread_only === undefined ? {} : { unread_only: options.unread_only }),
+      ...(options.has_attachment === undefined ? {} : { has_attachment: options.has_attachment }),
+    }, true);
     return {
       results: searched.messages.map((message) => ({
         id: message.stable_message_id,
         title: message.subject || "(no subject)",
         url: this.messageUrl(message.stable_message_id),
       })),
+      partial_failures: searched.partial_failures,
+      truncated: searched.truncated,
     };
   }
 
@@ -165,7 +204,7 @@ export class MailService {
 
   async listRecentMessages(input: {
     mailbox_ids: string[];
-    folder: string;
+    folder?: string;
     limit: number;
     unread_only?: boolean;
     after?: string;
@@ -173,7 +212,7 @@ export class MailService {
   }): Promise<SearchMessagesResult> {
     return this.#searchFanout({
       mailbox_ids: input.mailbox_ids,
-      folders: [input.folder],
+      ...(input.folder ? { folders: [input.folder] } : {}),
       limit: input.limit,
       ...(input.unread_only === undefined ? {} : { unread_only: input.unread_only }),
       ...(input.after ? { after: input.after } : {}),
@@ -181,7 +220,46 @@ export class MailService {
     });
   }
 
-  async searchMessages(input: SearchMessagesInput): Promise<SearchMessagesResult> {
+  async listMessagesPage(input: {
+    mailbox_id: string;
+    folder: string;
+    limit: number;
+    before_uid?: number;
+    uid_validity?: string;
+  }) {
+    if ((input.before_uid === undefined) !== (input.uid_validity === undefined)) {
+      throw new MailBridgeError("Both before_uid and uid_validity are required for continuation", "INVALID_ARGUMENT");
+    }
+    const expected = input.uid_validity === undefined ? undefined : BigInt(input.uid_validity);
+    const mailbox = this.registry.get(input.mailbox_id);
+    await this.#resolveSearchFolders(mailbox, [input.folder]);
+    const limit = Math.min(Math.max(input.limit, 1), 100);
+    return this.#forMailbox(mailbox, async () => {
+      const adapter = await this.adapters.create(mailbox);
+      const raw = await withTimeout(adapter.search({
+        folder: input.folder,
+        limit: limit + 1,
+        page_by_uid: true,
+        ...(input.before_uid === undefined ? {} : { before_uid: input.before_uid }),
+        ...(expected === undefined ? {} : { expected_uid_validity: expected }),
+      }), 25_000, "message page");
+      const ordered = raw.sort((a, b) => b.uid - a.uid);
+      if ((expected !== undefined && ordered.some((message) => message.uid_validity !== expected)) ||
+          ordered.some((message) => message.uid_validity !== ordered[0]?.uid_validity)) {
+        throw new MailBridgeError("Mailbox UIDVALIDITY changed while paging", "UIDVALIDITY_CHANGED");
+      }
+      const page = ordered.slice(0, limit);
+      return {
+        mailbox_id: mailbox.id,
+        folder: input.folder,
+        messages: page.map((message) => this.#summary(mailbox, message)),
+        uid_validity: (page[0]?.uid_validity ?? expected)?.toString() ?? null,
+        next_before_uid: ordered.length > limit ? page.at(-1)!.uid : null,
+      };
+    });
+  }
+
+  async searchMessages(input: SearchMessagesInput, dedupeAcrossFolders = false): Promise<SearchMessagesResult> {
     const hasNarrowingFilter = Boolean(
       input.free_text ||
         input.from ||
@@ -196,7 +274,7 @@ export class MailService {
     if (!hasNarrowingFilter) {
       throw new MailBridgeError("search_messages requires at least one narrowing filter", "UNBOUNDED_SEARCH_REJECTED");
     }
-    return this.#searchFanout(input);
+    return this.#searchFanout(input, dedupeAcrossFolders);
   }
 
   async fetchMessage(stableMessageId: string, options: FetchMessageOptions): Promise<MessageDetail> {
@@ -212,6 +290,60 @@ export class MailService {
         "fetch message",
       );
       return this.#detail(mailbox, raw, options.include_html, maxChars);
+    });
+  }
+
+  async fetchMessages(stableMessageIds: string[], options: FetchMessageOptions) {
+    const messages: MessageDetail[] = [];
+    const partial_failures: PartialFailure[] = [];
+    for (const stableMessageId of unique(stableMessageIds)) {
+      try {
+        messages.push(await this.fetchMessage(stableMessageId, options));
+      } catch (error) {
+        const safe = safeError(error);
+        let mailboxId = "unknown";
+        try {
+          mailboxId = this.ids.decode(stableMessageId).mailbox_id;
+        } catch {
+          mailboxId = "unknown";
+        }
+        partial_failures.push({ mailbox_id: mailboxId, code: safe.code, retryable: safe.retryable });
+      }
+    }
+    return { messages, partial_failures };
+  }
+
+  async fetchRawMessage(stableMessageId: string, options: { max_bytes: number; offset?: number }) {
+    const locator = this.ids.decode(stableMessageId);
+    const mailbox = this.registry.get(locator.mailbox_id);
+    this.registry.assertFolderAllowed(mailbox, locator.folder_id);
+    const window = Math.min(Math.max(options.max_bytes, 1), this.config.privacy.source_max_bytes);
+    const start = Math.max(Math.trunc(options.offset ?? 0), 0);
+    return this.#forMailbox(mailbox, async () => {
+      const adapter = await this.adapters.create(mailbox);
+      const raw = await withTimeout(
+        adapter.fetchRawSourceRange(locator.folder_id, locator.uid_validity, locator.uid, start, window),
+        30_000,
+        "fetch raw message",
+      );
+      const chunk = raw.bytes;
+      if (chunk.byteLength === 0 && (raw.total_size === null || start < raw.total_size)) {
+        throw new MailBridgeError("Raw message source is unavailable from this mailbox adapter", "RAW_SOURCE_UNAVAILABLE");
+      }
+      const delivered = start + chunk.byteLength;
+      const more = raw.total_size === null ? chunk.byteLength === window : delivered < raw.total_size;
+      return {
+        ...this.messageContext(stableMessageId),
+        headers: raw.headers,
+        authentication: summarizeAuthentication(raw.headers),
+        offset: start,
+        next_offset: more ? delivered : null,
+        returned_bytes: chunk.byteLength,
+        truncated: more,
+        sha256: createHash("sha256").update(chunk).digest("hex"),
+        source_base64: Buffer.from(chunk).toString("base64"),
+        untrusted_content_warning: UNTRUSTED_EMAIL_WARNING,
+      };
     });
   }
 
@@ -286,11 +418,12 @@ export class MailService {
     return message.attachments;
   }
 
-  async fetchAttachment(stableMessageId: string, attachmentId: string, maxBytes: number): Promise<AttachmentContent> {
+  async fetchAttachment(stableMessageId: string, attachmentId: string, maxBytes: number, offset = 0): Promise<AttachmentContent> {
     const locator = this.ids.decode(stableMessageId);
     const mailbox = this.registry.get(locator.mailbox_id);
     this.registry.assertFolderAllowed(mailbox, locator.folder_id);
-    const cap = Math.min(Math.max(maxBytes, 1), this.config.privacy.attachment_max_bytes);
+    const window = Math.min(Math.max(maxBytes, 1), this.config.privacy.attachment_max_bytes);
+    const start = Math.max(Math.trunc(offset), 0);
     return this.#forMailbox(mailbox, async () => {
       const adapter = await this.adapters.create(mailbox);
       const parts = await withTimeout(
@@ -303,19 +436,27 @@ export class MailService {
       );
       if (!match) throw new MailBridgeError("Attachment not found on this message", "ATTACHMENT_NOT_FOUND");
       const raw = await withTimeout(
-        adapter.fetchAttachment(locator.folder_id, locator.uid_validity, locator.uid, match.part, cap),
+        adapter.fetchAttachment(locator.folder_id, locator.uid_validity, locator.uid, match.part, start, window),
         60_000,
         "fetch attachment",
       );
+      const chunk = raw.bytes;
+      const delivered = start + chunk.byteLength;
+      const more = raw.truncated;
+      if (more && chunk.byteLength === 0) {
+        throw new MailBridgeError("Attachment stream made no progress", "ATTACHMENT_SOURCE_UNAVAILABLE");
+      }
       return {
         attachment_id: attachmentId,
         filename: raw.filename,
         mime_type: raw.mime_type,
         declared_size: raw.declared_size,
-        returned_bytes: raw.bytes.byteLength,
-        truncated: raw.truncated,
-        sha256: createHash("sha256").update(raw.bytes).digest("hex"),
-        content_base64: raw.bytes.toString("base64"),
+        offset: start,
+        returned_bytes: chunk.byteLength,
+        next_offset: more ? delivered : null,
+        truncated: more,
+        sha256: createHash("sha256").update(chunk).digest("hex"),
+        content_base64: Buffer.from(chunk).toString("base64"),
         untrusted_content_warning: UNTRUSTED_EMAIL_WARNING,
       };
     });
@@ -348,15 +489,16 @@ export class MailService {
     };
   }
 
-  async #searchFanout(input: SearchMessagesInput): Promise<SearchMessagesResult> {
+  async #searchFanout(input: SearchMessagesInput, dedupeAcrossFolders = false): Promise<SearchMessagesResult> {
     const requested = unique(input.mailbox_ids);
     if (requested.length === 0 || requested.length > 20) {
       throw new MailBridgeError("mailbox_ids must contain between 1 and 20 entries", "INVALID_ARGUMENT");
     }
-    const limit = Math.min(Math.max(input.limit, 1), 100);
+    const limit = Math.min(Math.max(input.limit, 1), 200);
     const messages: MessageSummary[] = [];
     const failures: PartialFailure[] = [];
     const tasks: Promise<void>[] = [];
+    let folderAtLimit = false;
 
     for (const mailboxId of requested) {
       const mailbox = this.registry.get(mailboxId);
@@ -389,6 +531,7 @@ export class MailService {
               const raw = await this.#forMailbox(mailbox, () =>
                 withTimeout(adapter.search(folderInput), 25_000, "message search"),
               );
+              if (raw.length >= folderInput.limit) folderAtLimit = true;
               messages.push(...raw.map((message) => this.#summary(mailbox, message)));
             } catch (error) {
               const safe = safeError(error);
@@ -400,7 +543,20 @@ export class MailService {
     }
     await Promise.all(tasks);
     const ordered = messages.sort((a, b) => b.received_at.localeCompare(a.received_at));
-    return { messages: ordered.slice(0, limit), partial_failures: failures, truncated: ordered.length > limit };
+    const selected = dedupeAcrossFolders ? dedupeSummaries(ordered) : ordered;
+    return { messages: selected.slice(0, limit), partial_failures: failures, truncated: folderAtLimit || selected.length > limit };
+  }
+
+  async #selectableFolders(mailbox: MailboxConfig): Promise<string[]> {
+    const cached = this.#folderCache.get(mailbox.id);
+    if (cached && cached.expires_at > Date.now()) return cached.folders;
+    const adapter = await this.adapters.create(mailbox);
+    const discovered = await this.#forMailbox(mailbox, () =>
+      withTimeout(adapter.discoverFolders(), 25_000, "discover folders"),
+    );
+    const folders = discovered.filter((folder) => folder.selectable).map((folder) => folder.folder_id);
+    this.#folderCache.set(mailbox.id, { folders, expires_at: Date.now() + FOLDER_CACHE_TTL_MS });
+    return folders;
   }
 
   async #resolveSearchFolders(mailbox: MailboxConfig, requested?: string[]): Promise<string[]> {
@@ -410,11 +566,7 @@ export class MailService {
       return folders;
     }
 
-    const adapter = await this.adapters.create(mailbox);
-    const discovered = await this.#forMailbox(mailbox, () =>
-      withTimeout(adapter.discoverFolders(), 25_000, "discover folders"),
-    );
-    const selectable = new Set(discovered.filter((folder) => folder.selectable).map((folder) => folder.folder_id));
+    const selectable = new Set(await this.#selectableFolders(mailbox));
     const folders = requested?.length ? unique(requested) : [...selectable];
     const outside = folders.find((folder) => !selectable.has(folder));
     if (outside) throw new MailBridgeError("Folder is not selectable or was not discovered", "FOLDER_NOT_ALLOWED");

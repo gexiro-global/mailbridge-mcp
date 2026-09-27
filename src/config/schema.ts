@@ -113,9 +113,9 @@ export const MailBridgeConfigSchema = z
     }),
     privacy: z.object({
       snippet_max_chars: z.number().int().min(80).max(1000).default(320),
-      body_max_chars: z.number().int().min(1000).max(100_000).default(20_000),
-      source_max_bytes: z.number().int().min(64 * 1024).max(20 * 1024 * 1024).default(5 * 1024 * 1024),
-      attachment_max_bytes: z.number().int().min(64 * 1024).max(25 * 1024 * 1024).default(25 * 1024 * 1024),
+      body_max_chars: z.number().int().min(1000).max(1_000_000).default(20_000),
+      source_max_bytes: z.number().int().min(64 * 1024).max(200 * 1024 * 1024).default(5 * 1024 * 1024),
+      attachment_max_bytes: z.number().int().min(64 * 1024).max(500 * 1024 * 1024).default(25 * 1024 * 1024),
       audit_retention_days: z.number().int().min(1).max(365).default(30),
     }),
     panel: PanelConfigSchema.default({

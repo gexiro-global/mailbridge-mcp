@@ -25,10 +25,12 @@ Microsoft or any email provider.
 - multiple user-scoped IMAP accounts, with metadata in SQLite and credential
   envelopes encrypted by a key stored outside the database;
 - TLS certificate and hostname verification, with no insecure fallback;
-- 11 read-only tools for mailboxes, health, folders, recent mail, native IMAP
-  search, cross-mailbox search, messages, threads and attachments;
+- 15 read-only tools for mailboxes, health, folders, complete UID-based folder
+  paging, scoped cross-mailbox search, batch and raw MIME reads, threads,
+  cross-brand findings and attachments;
 - IMAP `EXAMINE` and `BODY.PEEK` for non-mutating reads;
-- attachment retrieval bounded to 25 MiB and treated as untrusted content;
+- raw MIME and attachment reads in offset-based chunks, with the configured
+  byte cap applied to each response and all content treated as untrusted;
 - an Apps SDK settings widget that never returns a stored password;
 - OAuth resource-server validation for remote deployments;
 - an optional 14-tool Safe Send layer with encrypted drafts, bounded outgoing

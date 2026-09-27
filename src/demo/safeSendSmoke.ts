@@ -10,12 +10,16 @@ const expectedTools = [
   "fetch",
   "fetch_attachment",
   "fetch_message",
+  "fetch_messages",
+  "fetch_raw_message",
   "fetch_thread",
+  "find_cross_brand_threads",
   "get_send_policy",
   "get_send_status",
   "list_attachments",
   "list_folders",
   "list_mailboxes",
+  "list_messages_page",
   "list_recent_messages",
   "list_send_audit",
   "mailbox_health",
@@ -49,7 +53,7 @@ async function main(): Promise<void> {
   });
   assert(widgetPage.includes("LOCAL SAFE SEND STAGING — SYNTHETIC TRANSPORT — NO REAL EMAIL"), "safe staging warning is missing");
 
-  const client = new Client({ name: "mailbridge-v2-safe-send-smoke", version: "2.1.0" }, { capabilities: {} });
+  const client = new Client({ name: "mailbridge-v2-safe-send-smoke", version: "2.2.0" }, { capabilities: {} });
   const transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`));
   await client.connect(transport);
   try {
@@ -75,7 +79,7 @@ async function main(): Promise<void> {
     const created = structured(await call(client, "create_draft", {
       mailbox_id: mailboxId,
       to: ["recipient@external.synthetic.invalid"],
-      subject: "MailBridge v2.1.0 synthetic Safe Send acceptance",
+      subject: "MailBridge v2.2.0 synthetic Safe Send acceptance",
       text_body: "This is a synthetic transport test. No real email is sent.",
     }));
     let draft = record(created.draft, "create_draft returned no draft");

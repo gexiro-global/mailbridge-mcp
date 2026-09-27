@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.0 — 2026-09-27
+
+- added mailbox-scoped knowledge search, explicit partial-failure and truncation
+  signals, bounded batch reads, raw MIME/authentication analysis and advisory
+  cross-brand findings;
+- added read-only UID/UIDVALIDITY folder paging for complete traversal of each
+  selectable folder, including Sent and Spam;
+- made raw MIME and attachment continuation work beyond per-response byte caps;
+- expanded the mail-read surface from 11 to 15 tools while retaining the
+  separate settings opener and default-disabled 14-tool Safe Send layer;
+- updated MCP, IMAP, MIME and SMTP dependencies; the locked production
+  dependency audit reports zero vulnerabilities.
+
 ## 2.1.0 — 2026-08-29
 
 - added bounded outgoing attachments to encrypted Safe Send drafts, including

@@ -20,6 +20,8 @@ export interface AttachmentContent {
   filename: string | null;
   mime_type: string;
   declared_size: number | null;
+  offset: number;
+  next_offset: number | null;
   returned_bytes: number;
   truncated: boolean;
   sha256: string;
