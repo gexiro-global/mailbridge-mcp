@@ -1,7 +1,7 @@
 # MailBridge Safe Send
 
 Safe Send is an optional MailBridge capability. It is disabled by default and
-does not change the read-only guarantees of the 11 mail-reading tools.
+does not change the read-only guarantees of the 15 mail-reading tools.
 
 Enabling Safe Send is an operator decision that permits an external side effect.
 Do not enable it until SMTP credentials, recipient policy, limits, recovery and
