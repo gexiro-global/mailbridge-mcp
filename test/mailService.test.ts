@@ -99,6 +99,87 @@ describe("mail service", () => {
     expect(result[0]).not.toHaveProperty("content");
   });
 
+  it("uses the All mailbox for default search and keeps explicit folder scope", async () => {
+    const config = structuredClone(testConfig);
+    config.mailboxes[0]!.folder_access = "all_selectable";
+    const factory = new FakeFactory();
+    factory.folders.set("brand_a", ["INBOX", "All", "Label", "Drafts", "Junk", "Trash"]);
+    factory.messages.set("brand_a", [
+      rawMessage({ uid: 42, folder: "All" }),
+      rawMessage({ uid: 43, folder: "Label" }),
+    ]);
+    const searched: string[] = [];
+    const create = factory.create.bind(factory);
+    factory.create = async (mailbox) => {
+      const adapter = await create(mailbox);
+      const discover = adapter.discoverFolders.bind(adapter);
+      adapter.discoverFolders = async () => (await discover()).map((folder) => ({
+        ...folder,
+        special_use: ({ All: "\\All", Drafts: "\\Drafts", Junk: "\\Junk", Trash: "\\Trash" } as Record<string, string>)[folder.folder_id] ?? folder.special_use,
+      }));
+      const search = adapter.search.bind(adapter);
+      adapter.search = async (input) => {
+        searched.push(input.folder);
+        return search(input);
+      };
+      return adapter;
+    };
+    const service = new MailService(config, factory, new StableIdCodec("0123456789abcdef0123456789abcdef"));
+    const result = await service.searchMessages({ mailbox_ids: ["brand_a"], subject: "Example", limit: 20 });
+    expect(new Set(searched)).toEqual(new Set(["All", "Drafts", "Junk", "Trash"]));
+    expect(result.messages.map((message) => message.source_folder)).toEqual(["All"]);
+    searched.length = 0;
+    const explicit = await service.searchMessages({ mailbox_ids: ["brand_a"], folders: ["Label"], subject: "Example", limit: 20 });
+    expect(searched).toEqual(["Label"]);
+    expect(explicit.messages.map((message) => message.source_folder)).toEqual(["Label"]);
+  });
+
+  it("searches thread folders concurrently within the mailbox limit", async () => {
+    const config = structuredClone(testConfig);
+    config.mailboxes[0]!.folder_access = "all_selectable";
+    const factory = new FakeFactory();
+    factory.folders.set("brand_a", ["INBOX", "Folder-1", "Folder-2", "Folder-3"]);
+    factory.messages.set("brand_a", [
+      rawMessage({ uid: 42, message_id: "<42@example.invalid>" }),
+      rawMessage({
+        uid: 43,
+        folder: "Folder-3",
+        message_id: "<43@example.invalid>",
+        in_reply_to: "<42@example.invalid>",
+        received_at: "2026-07-17T09:00:00.000Z",
+      }),
+    ]);
+    let active = 0;
+    let peak = 0;
+    const create = factory.create.bind(factory);
+    factory.create = async (mailbox) => {
+      const adapter = await create(mailbox);
+      const search = adapter.search.bind(adapter);
+      adapter.search = async (input) => {
+        active++;
+        peak = Math.max(peak, active);
+        try {
+          await new Promise<void>((resolve) => setTimeout(resolve, 10));
+          return await search(input);
+        } finally {
+          active--;
+        }
+      };
+      return adapter;
+    };
+    const ids = new StableIdCodec("0123456789abcdef0123456789abcdef");
+    const service = new MailService(config, factory, ids);
+    const id = ids.encode({ mailbox_id: "brand_a", folder_id: "INBOX", uid_validity: 100n, uid: 42 });
+
+    const result = await service.fetchThread(id, 10);
+    expect(peak).toBe(2);
+    expect(result.partial_failures).toEqual([]);
+    expect(result.messages.map((message) => message.message_id)).toEqual([
+      "<42@example.invalid>",
+      "<43@example.invalid>",
+    ]);
+  });
+
   it("reconstructs a thread from identifiers", async () => {
     const { service, factory, ids } = setup();
     factory.messages.set("brand_a", [

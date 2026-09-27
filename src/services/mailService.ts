@@ -43,7 +43,7 @@ export class MailService {
   readonly #mailboxSemaphores = new Map<string, Semaphore>();
   readonly #fanout = new Semaphore(4);
   readonly #connectionState = new Map<string, ConnectionState>();
-  readonly #folderCache = new Map<string, { folders: string[]; expires_at: number }>();
+  readonly #folderCache = new Map<string, { folders: string[]; default_search_folders: string[]; expires_at: number }>();
 
   constructor(
     readonly config: MailBridgeConfig,
@@ -359,23 +359,31 @@ export class MailService {
       return { messages: [seed], confidence: "LOW", partial_failures: [] as PartialFailure[] };
     }
 
-    const summaries: RawMessageSummary[] = [];
-    const failures: PartialFailure[] = [];
-    for (const folder of await this.#resolveSearchFolders(mailbox)) {
+    const folders = await this.#resolveSearchFolders(mailbox);
+    const folderResults = await Promise.all(folders.map((folder) => this.#fanout.use(async () => {
       try {
         const adapter = await this.adapters.create(mailbox);
-        const result = await this.#forMailbox(mailbox, () =>
+        const messages = await this.#forMailbox(mailbox, () =>
           withTimeout(
             adapter.search({ folder, thread_identifiers: identifiers, limit: maxMessages }),
             25_000,
             "thread search",
           ),
         );
-        summaries.push(...result);
+        return { messages, failure: null };
       } catch (error) {
         const safe = safeError(error);
-        failures.push({ mailbox_id: mailbox.id, folder, code: safe.code, retryable: safe.retryable });
+        return {
+          messages: [] as RawMessageSummary[],
+          failure: { mailbox_id: mailbox.id, folder, code: safe.code, retryable: safe.retryable } as PartialFailure,
+        };
       }
+    })));
+    const summaries: RawMessageSummary[] = [];
+    const failures: PartialFailure[] = [];
+    for (const result of folderResults) {
+      summaries.push(...result.messages);
+      if (result.failure) failures.push(result.failure);
     }
 
     const locators = uniqueBy(
@@ -554,8 +562,14 @@ export class MailService {
     const discovered = await this.#forMailbox(mailbox, () =>
       withTimeout(adapter.discoverFolders(), 25_000, "discover folders"),
     );
-    const folders = discovered.filter((folder) => folder.selectable).map((folder) => folder.folder_id);
-    this.#folderCache.set(mailbox.id, { folders, expires_at: Date.now() + FOLDER_CACHE_TTL_MS });
+    const selectable = discovered.filter((folder) => folder.selectable);
+    const folders = selectable.map((folder) => folder.folder_id);
+    const all = selectable.find((folder) => folder.special_use?.toLowerCase() === "\\all");
+    const defaultSearchFolders = all
+      ? [all, ...selectable.filter((folder) => ["\\drafts", "\\junk", "\\trash"].includes(folder.special_use?.toLowerCase() ?? ""))]
+          .map((folder) => folder.folder_id)
+      : folders;
+    this.#folderCache.set(mailbox.id, { folders, default_search_folders: defaultSearchFolders, expires_at: Date.now() + FOLDER_CACHE_TTL_MS });
     return folders;
   }
 
@@ -567,7 +581,9 @@ export class MailService {
     }
 
     const selectable = new Set(await this.#selectableFolders(mailbox));
-    const folders = requested?.length ? unique(requested) : [...selectable];
+    const folders = requested?.length
+      ? unique(requested)
+      : this.#folderCache.get(mailbox.id)?.default_search_folders ?? [...selectable];
     const outside = folders.find((folder) => !selectable.has(folder));
     if (outside) throw new MailBridgeError("Folder is not selectable or was not discovered", "FOLDER_NOT_ALLOWED");
     return folders;

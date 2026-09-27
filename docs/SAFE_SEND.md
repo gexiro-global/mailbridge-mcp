@@ -87,8 +87,8 @@ a general IMAP mutation tool.
 
 ## Apps SDK surface
 
-The Safe Send preview is a separate MCP Apps resource. Version 2.2.0 registers
-`ui://mailbridge/safe-send-v2.2.0.html`. Clients should use the
+The Safe Send preview is a separate MCP Apps resource. Version 2.2.1 registers
+`ui://mailbridge/safe-send-v2.2.1.html`. Clients should use the
 `ui.resourceUri` supplied by tool metadata rather than hard-code that URI across
 future releases.
 
