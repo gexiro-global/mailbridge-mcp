@@ -20,6 +20,21 @@ MailBridge is an independent open-source project by Gexiro Global Enterprises
 Ltd. It is not affiliated with, endorsed by or sponsored by OpenAI, Google,
 Microsoft or any email provider.
 
+## Start here
+
+| Your goal | Go to |
+|---|---|
+| See MailBridge without connecting real mail | [Synthetic evaluation](#1-synthetic-evaluation-from-a-source-checkout) |
+| Connect your own mailboxes | [Local connector](#2-local-connector-from-a-source-checkout) or [production deployment](#3-production-docker-deployment) |
+| Search, read and prepare mail in ChatGPT | [User guide](docs/USER_GUIDE.md) |
+| Enable controlled sending | [Safe Send](docs/SAFE_SEND.md) |
+
+Once connected, a typical workflow is: check mailbox health, search a selected
+mailbox, read the relevant message or thread, then prepare a draft for review.
+Sending remains a separate, policy-gated action. The
+[user guide](docs/USER_GUIDE.md) includes example requests and explains what
+each result proves.
+
 ## Capabilities
 
 - multiple user-scoped IMAP accounts, with metadata in SQLite and credential
@@ -168,6 +183,7 @@ and provider limits.
 
 ## Documentation
 
+- [User guide: everyday workflows](docs/USER_GUIDE.md)
 - [Architecture](ARCHITECTURE.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Authentication](docs/AUTHENTICATION.md)
