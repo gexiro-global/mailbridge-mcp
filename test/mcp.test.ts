@@ -22,7 +22,7 @@ describe("MCP contract", () => {
 
     const result = await client.listTools();
     expect(result.tools.map((tool) => tool.name).sort()).toEqual([
-      "fetch", "fetch_attachment", "fetch_message", "fetch_thread", "list_attachments", "list_folders", "list_mailboxes", "list_recent_messages", "mailbox_health", "search", "search_messages",
+      "fetch", "fetch_attachment", "fetch_message", "fetch_messages", "fetch_raw_message", "fetch_thread", "find_cross_brand_threads", "list_attachments", "list_folders", "list_mailboxes", "list_messages_page", "list_recent_messages", "mailbox_health", "search", "search_messages",
     ]);
     expect(result.tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
     expect(result.tools.every((tool) => tool.annotations?.destructiveHint === false)).toBe(true);
@@ -54,7 +54,7 @@ describe("MCP contract", () => {
       "add_draft_attachment", "create_draft", "get_send_policy", "get_send_status", "list_send_audit", "open_mail_composer",
       "prepare_draft_send", "remove_draft_attachment", "reply_draft", "reply_email", "send_draft", "send_email", "update_draft", "validate_draft",
     ]);
-    expect(result.tools).toHaveLength(25);
+    expect(result.tools).toHaveLength(29);
     expect(result.tools.every((tool) => tool.description?.startsWith("Use this"))).toBe(true);
     for (const name of ["open_mail_composer", "get_send_policy", "validate_draft", "get_send_status", "list_send_audit"]) {
       expect(byName.get(name)?.annotations).toEqual(expect.objectContaining({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }));

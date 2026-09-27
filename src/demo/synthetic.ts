@@ -7,6 +7,7 @@ import type {
   RawAttachmentContent,
   RawMessageDetail,
   RawMessageSummary,
+  RawSourceChunk,
   ReadOnlyImapAdapter,
 } from "../imap/types.js";
 import type { MailboxConnectionTester } from "../app/connectionTest.js";
@@ -64,7 +65,12 @@ class SyntheticImapAdapter implements ReadOnlyImapAdapter {
   }
 
   async search(input: FolderSearchInput): Promise<RawMessageSummary[]> {
-    return this.#messages.filter((message) => matches(message, input)).slice(0, input.limit);
+    return this.#messages
+      .filter((message) => matches(message, input))
+      .sort(input.page_by_uid
+        ? (a, b) => b.uid - a.uid
+        : (a, b) => b.received_at.localeCompare(a.received_at))
+      .slice(0, input.limit);
   }
 
   async fetch(folder: string, uidValidity: bigint, uid: number, _maxBytes: number): Promise<RawMessageDetail> {
@@ -73,6 +79,16 @@ class SyntheticImapAdapter implements ReadOnlyImapAdapter {
     );
     if (!message) throw new Error("Synthetic message not found");
     return structuredClone(message);
+  }
+
+  async fetchRawSourceRange(folder: string, uidValidity: bigint, uid: number, offset: number, maxBytes: number): Promise<RawSourceChunk> {
+    const message = await this.fetch(folder, uidValidity, uid, maxBytes);
+    const source = message.source;
+    return {
+      headers: message.headers,
+      bytes: source?.subarray(offset, offset + maxBytes) ?? Buffer.alloc(0),
+      total_size: source?.byteLength ?? null,
+    };
   }
 
   async listAttachmentParts(folder: string, uidValidity: bigint, uid: number): Promise<RawAttachment[]> {
@@ -88,20 +104,21 @@ class SyntheticImapAdapter implements ReadOnlyImapAdapter {
     uidValidity: bigint,
     uid: number,
     part: string,
+    offset: number,
     maxBytes: number,
   ): Promise<RawAttachmentContent> {
     const parts = await this.listAttachmentParts(folder, uidValidity, uid);
     const meta = parts.find((attachment) => attachment.part === part);
     if (!meta) throw new Error("Synthetic attachment not found");
     const body = Buffer.from(`LOCAL SYNTHETIC DEMO attachment ${meta.filename ?? part}`, "utf8");
-    const bytes = body.subarray(0, Math.max(1, Math.min(maxBytes, body.byteLength)));
+    const bytes = body.subarray(offset, offset + Math.max(1, maxBytes));
     return {
       part,
       filename: meta.filename,
       mime_type: meta.mime_type,
       declared_size: meta.size,
       bytes,
-      truncated: bytes.byteLength < body.byteLength,
+      truncated: offset + bytes.byteLength < body.byteLength,
     };
   }
 
@@ -223,6 +240,8 @@ function syntheticMessages(mailbox: MailboxConfig): RawMessageDetail[] {
 
 function matches(message: RawMessageDetail, input: FolderSearchInput): boolean {
   if (message.folder !== input.folder) return false;
+  if (input.expected_uid_validity !== undefined && message.uid_validity !== input.expected_uid_validity) return false;
+  if (input.before_uid !== undefined && message.uid >= input.before_uid) return false;
   if (input.after && new Date(message.received_at) < input.after) return false;
   if (input.before && new Date(message.received_at) > input.before) return false;
   if (input.unread_only && !message.unread) return false;

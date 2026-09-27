@@ -31,6 +31,13 @@ export interface RawMessageDetail extends RawMessageSummary {
   html_body: string | null;
   references: string[];
   source_truncated: boolean;
+  source?: Buffer;
+}
+
+export interface RawSourceChunk {
+  headers: Record<string, string | string[]>;
+  bytes: Buffer;
+  total_size: number | null;
 }
 
 export interface RawAttachmentContent {
@@ -54,6 +61,9 @@ export interface FolderSearchInput {
   unread_only?: boolean;
   has_attachment?: boolean;
   thread_identifiers?: string[];
+  before_uid?: number;
+  expected_uid_validity?: bigint;
+  page_by_uid?: boolean;
   limit: number;
 }
 
@@ -63,8 +73,9 @@ export interface ReadOnlyImapAdapter {
   discoverFolders(): Promise<FolderSummary[]>;
   search(input: FolderSearchInput): Promise<RawMessageSummary[]>;
   fetch(folder: string, uidValidity: bigint, uid: number, maxBytes: number): Promise<RawMessageDetail>;
+  fetchRawSourceRange(folder: string, uidValidity: bigint, uid: number, offset: number, maxBytes: number): Promise<RawSourceChunk>;
   listAttachmentParts(folder: string, uidValidity: bigint, uid: number): Promise<RawAttachment[]>;
-  fetchAttachment(folder: string, uidValidity: bigint, uid: number, part: string, maxBytes: number): Promise<RawAttachmentContent>;
+  fetchAttachment(folder: string, uidValidity: bigint, uid: number, part: string, offset: number, maxBytes: number): Promise<RawAttachmentContent>;
   verifyPeekInvariant(folder: string, maxBytes: number): Promise<{
     success: boolean;
     flags_before: string[] | null;

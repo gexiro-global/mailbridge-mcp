@@ -18,7 +18,7 @@ describe("HTTP transport", () => {
     await client.connect(transport);
     try {
       const result = await client.listTools();
-      expect(result.tools).toHaveLength(11);
+      expect(result.tools).toHaveLength(15);
       expect(result.tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
     } finally {
       await client.close();

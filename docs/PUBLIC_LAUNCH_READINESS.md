@@ -65,14 +65,14 @@ Do not publish any of these without new, specific evidence and authorization:
 Record the release tag and immutable commit before publishing. Every box must be
 supported by current CI or a redacted local artifact:
 
-Latest local evidence: [2.1.0 release verification](RELEASE_VERIFICATION_2.1.0.md).
+Latest local evidence: [2.2.0 release verification](RELEASE_VERIFICATION_2.2.0.md).
 Its external gates still apply until the immutable release workflow succeeds.
 
 - [ ] clean checkout at the intended release commit;
 - [ ] `npm ci --ignore-scripts` succeeds with the documented Node/npm versions;
 - [ ] `npm run check` passes;
 - [ ] `npm audit --omit=dev` reports no unresolved production vulnerability;
-- [ ] read-only synthetic smoke exposes exactly 11 mail-read tools plus the
+- [ ] read-only synthetic smoke exposes exactly 15 mail-read tools plus the
       separately scoped mailbox-settings opener, and no SMTP tools;
 - [ ] Safe Send synthetic smoke exposes the expected optional tools and blocks
       unsafe/default-direct sends;

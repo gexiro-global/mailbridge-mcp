@@ -1,13 +1,19 @@
 # Tool catalog
 
-## Read-only surface — 11 tools
+## Read-only surface — 15 tools
 
 `list_mailboxes`, `mailbox_health`, `list_folders`, `list_recent_messages`,
-`search_messages`, `fetch_message`, `fetch_thread`, `list_attachments`,
-`fetch_attachment`, `search`, `fetch`.
+`list_messages_page`, `search_messages`, `search`, `fetch`,
+`fetch_message`, `fetch_messages`, `fetch_raw_message`, `fetch_thread`,
+`list_attachments`, `fetch_attachment`, `find_cross_brand_threads`.
 
 All read tools use accurate read-only/non-destructive annotations. Message and
 attachment reads use `BODY.PEEK` from `EXAMINE` folders and preserve IMAP flags.
+
+Search is bounded: inspect `truncated` and `partial_failures`. For a complete
+mailbox review, call `list_messages_page` for each selectable folder until
+`next_before_uid` is null, carrying `uid_validity` between pages. Raw MIME
+and attachment byte limits apply per call; follow `next_offset` to continue.
 
 The mailbox Settings API is not a mail-message tool. User-approved add, replace,
 disable and delete operations write encrypted connector configuration and

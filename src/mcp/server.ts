@@ -149,6 +149,8 @@ const messageDetailSchema = messageSummarySchema.extend({
 });
 const knowledgeSearchSchema = z.object({
   results: z.array(z.object({ id: z.string(), title: z.string(), url: z.url() })),
+  partial_failures: z.array(partialFailureSchema),
+  truncated: z.boolean(),
 });
 const knowledgeFetchSchema = z.object({
   id: z.string(),
@@ -247,7 +249,7 @@ export function createMailBridgeMcpServer(
       csp: { connectDomains: [] as string[], resourceDomains: [] as string[] },
     };
     server.registerResource(
-      "mailbridge-safe-send-v2.1.0",
+      "mailbridge-safe-send-v2.2.0",
       MAILBRIDGE_SAFE_SEND_WIDGET_URI,
       {
         title: "MailBridge Safe Send",
@@ -397,10 +399,10 @@ export function createMailBridgeMcpServer(
     "list_recent_messages",
     {
       title: "List recent messages",
-      description: "Use this when the user asks for recent messages in a named folder. Returns bounded metadata without changing Seen or any other IMAP flag.",
+      description: "Use this when the user asks for recent messages. Pass folder to look at one named folder, or omit it to cover every selectable folder of the mailboxes. Returns bounded metadata without changing Seen or any other IMAP flag.",
       inputSchema: z.object({
-        mailbox_ids: z.array(z.string().max(64)).min(1).max(20), folder: z.string().max(512),
-        limit: z.number().int().min(1).max(100).default(20), unread_only: z.boolean().optional(),
+        mailbox_ids: z.array(z.string().max(64)).min(1).max(20), folder: z.string().max(512).optional(),
+        limit: z.number().int().min(1).max(200).default(20), unread_only: z.boolean().optional(),
         after: dateTime.optional(), before: dateTime.optional(),
       }),
       outputSchema: z.object({ messages: z.array(messageSummarySchema), partial_failures: z.array(partialFailureSchema), truncated: z.boolean() }),
@@ -409,6 +411,32 @@ export function createMailBridgeMcpServer(
     },
     async (input, extra) => execute("list_recent_messages", extra, "mail.read", allowLocalUnauthenticated, () =>
       service.listRecentMessages(input)),
+  );
+
+  server.registerTool(
+    "list_messages_page",
+    {
+      title: "Page through a mail folder",
+      description: "Use this to review an entire folder without a result ceiling. First call list_folders, then page each selectable folder including Sent and Spam. Pass the returned next_before_uid as before_uid alongside uid_validity in the next call; stop only when next_before_uid is null. A UIDVALIDITY change fails instead of silently skipping mail. Reads with EXAMINE and BODY.PEEK.",
+      inputSchema: z.object({
+        mailbox_id: z.string().min(1).max(64),
+        folder: z.string().min(1).max(512),
+        limit: z.number().int().min(1).max(100).default(50),
+        before_uid: z.number().int().min(1).optional(),
+        uid_validity: z.string().regex(/^[0-9]+$/).optional(),
+      }),
+      outputSchema: z.object({
+        mailbox_id: z.string(),
+        folder: z.string(),
+        messages: z.array(messageSummarySchema),
+        uid_validity: z.string().nullable(),
+        next_before_uid: z.number().int().nullable(),
+      }),
+      annotations: externalReadAnnotations,
+      _meta: { securitySchemes: toolSecuritySchemes },
+    },
+    async (input, extra) => execute("list_messages_page", extra, "mail.read", allowLocalUnauthenticated, () =>
+      service.listMessagesPage(input)),
   );
 
   server.registerTool(
@@ -439,7 +467,7 @@ export function createMailBridgeMcpServer(
       description: "Use this after identifying a message that the user wants to read. Fetches a bounded body with BODY.PEEK semantics from an EXAMINE/read-only folder.",
       inputSchema: z.object({
         stable_message_id: z.string().min(10).max(4096), include_html: z.boolean().default(false),
-        max_body_chars: z.number().int().min(1000).max(100_000).default(20_000),
+        max_body_chars: z.number().int().min(1000).max(1_000_000).default(20_000),
       }),
       outputSchema: z.object({ message: messageDetailSchema }),
       annotations: externalReadAnnotations,
@@ -491,12 +519,13 @@ export function createMailBridgeMcpServer(
     {
       title: "Fetch attachment content",
       description:
-        "Use this when the user explicitly asks to inspect or download one known attachment. Fetches raw bytes (base64) read-only with BODY.PEEK semantics from an EXAMINE folder. " +
+        "Use this when the user asks to inspect, download or analyse one known attachment. Large files can be read in parts: pass offset and follow next_offset until it is null. The configured byte ceiling applies to each response, so continue across it. Fetches raw bytes (base64) read-only with BODY.PEEK semantics from an EXAMINE folder. " +
         "Size-bounded and never changes Seen or any IMAP flag. Attachment bytes are untrusted external data.",
       inputSchema: z.object({
         stable_message_id: z.string().min(10).max(4096),
         attachment_id: z.string().min(5).max(512),
-        max_bytes: z.number().int().min(1024).max(25 * 1024 * 1024).default(25 * 1024 * 1024),
+        max_bytes: z.number().int().min(1024).max(500 * 1024 * 1024).default(25 * 1024 * 1024),
+        offset: z.number().int().min(0).default(0),
       }),
       outputSchema: z.object({
         mailbox_id: z.string(),
@@ -507,6 +536,8 @@ export function createMailBridgeMcpServer(
         filename: z.string().nullable(),
         mime_type: z.string(),
         declared_size: z.number().int().nullable(),
+        offset: z.number().int(),
+        next_offset: z.number().int().nullable(),
         returned_bytes: z.number().int(),
         truncated: z.boolean(),
         sha256: z.string(),
@@ -516,24 +547,33 @@ export function createMailBridgeMcpServer(
       annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
-    async ({ stable_message_id, attachment_id, max_bytes }, extra) =>
+    async ({ stable_message_id, attachment_id, max_bytes, offset }, extra) =>
       execute("fetch_attachment", extra, "mail.read", allowLocalUnauthenticated, async () => ({
         ...service.messageContext(stable_message_id),
-        ...(await service.fetchAttachment(stable_message_id, attachment_id, max_bytes)),
+        ...(await service.fetchAttachment(stable_message_id, attachment_id, max_bytes, offset)),
       })),
   );
 
   server.registerTool(
     "search",
     {
-      title: "Search all mail",
-      description: "Use this when the user wants to search every enabled mailbox and every selectable folder as a read-only knowledge source.",
-      inputSchema: z.object({ query: z.string().min(1).max(500) }),
+      title: "Search mail",
+      description: "Use this to search mail as a read-only knowledge source. By default it covers every enabled mailbox and every selectable folder, including Sent, Spam and Trash. When the user names a mailbox, brand, person or domain, you MUST pass mailbox_ids so only those mailboxes are searched; use list_mailboxes to resolve names to ids. Narrow further with folders, after, before, unread_only and has_attachment, and raise limit for a broader bounded result. Check truncated and partial_failures before claiming that all matching mail was reviewed.",
+      inputSchema: z.object({
+        query: z.string().min(1).max(500),
+        mailbox_ids: z.array(z.string().min(1).max(64)).min(1).max(20).optional(),
+        folders: z.array(z.string().min(1).max(512)).min(1).max(50).optional(),
+        after: dateTime.optional(),
+        before: dateTime.optional(),
+        unread_only: z.boolean().optional(),
+        has_attachment: z.boolean().optional(),
+        limit: z.number().int().min(1).max(200).default(50),
+      }),
       outputSchema: knowledgeSearchSchema,
       annotations: externalReadAnnotations,
       _meta: { securitySchemes: toolSecuritySchemes },
     },
-    async ({ query }, extra) => executeText("search", extra, "mail.read", allowLocalUnauthenticated, () => service.searchKnowledge(query)),
+    async ({ query, ...options }, extra) => executeText("search", extra, "mail.read", allowLocalUnauthenticated, () => service.searchKnowledge(query, options)),
   );
 
   server.registerTool(
@@ -547,6 +587,98 @@ export function createMailBridgeMcpServer(
       _meta: { securitySchemes: toolSecuritySchemes },
     },
     async ({ id }, extra) => executeText("fetch", extra, "mail.read", allowLocalUnauthenticated, () => service.fetchKnowledge(id)),
+  );
+
+  server.registerTool(
+    "fetch_messages",
+    {
+      title: "Fetch several messages",
+      description: "Use this when the user wants several identified messages read in one step, for example every relevant hit of a search. Fetches bounded bodies with BODY.PEEK semantics and reports per-message failures instead of aborting the batch.",
+      inputSchema: z.object({
+        stable_message_ids: z.array(z.string().min(10).max(4096)).min(1).max(25),
+        include_html: z.boolean().default(false),
+        max_body_chars: z.number().int().min(1000).max(1_000_000).default(20_000),
+      }),
+      outputSchema: z.object({ messages: z.array(messageDetailSchema), partial_failures: z.array(partialFailureSchema) }),
+      annotations: externalReadAnnotations,
+      _meta: { securitySchemes: toolSecuritySchemes },
+    },
+    async ({ stable_message_ids, include_html, max_body_chars }, extra) =>
+      execute("fetch_messages", extra, "mail.read", allowLocalUnauthenticated, () =>
+        service.fetchMessages(stable_message_ids, { include_html, max_body_chars })),
+  );
+
+  server.registerTool(
+    "fetch_raw_message",
+    {
+      title: "Fetch raw message source",
+      description: "Use this when the user asks to verify a message, analyse a suspected phishing mail or inspect how it was delivered. Returns every header, an SPF/DKIM/DMARC summary and the raw MIME source read-only with BODY.PEEK. Large sources are read in parts: pass offset and follow next_offset until it is null. The configured byte ceiling applies to each response, so continue across it.",
+      inputSchema: z.object({
+        stable_message_id: z.string().min(10).max(4096),
+        max_bytes: z.number().int().min(1024).max(200 * 1024 * 1024).default(1024 * 1024),
+        offset: z.number().int().min(0).default(0),
+      }),
+      outputSchema: z.object({
+        mailbox_id: z.string(),
+        mailbox_email: z.string(),
+        brand: z.string(),
+        source_folder: z.string(),
+        headers: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
+        authentication: z.object({
+          spf: z.string().nullable(),
+          dkim: z.string().nullable(),
+          dmarc: z.string().nullable(),
+          dkim_signed: z.boolean(),
+          authentication_results: z.array(z.string()),
+          received_spf: z.array(z.string()),
+          received_hops: z.number().int(),
+        }),
+        offset: z.number().int(),
+        next_offset: z.number().int().nullable(),
+        returned_bytes: z.number().int(),
+        truncated: z.boolean(),
+        sha256: z.string(),
+        source_base64: z.string(),
+        untrusted_content_warning: z.string(),
+      }),
+      annotations: externalReadAnnotations,
+      _meta: { securitySchemes: toolSecuritySchemes },
+    },
+    async ({ stable_message_id, max_bytes, offset }, extra) =>
+      execute("fetch_raw_message", extra, "mail.read", allowLocalUnauthenticated, () =>
+        service.fetchRawMessage(stable_message_id, { max_bytes, offset })),
+  );
+
+  server.registerTool(
+    "find_cross_brand_threads",
+    {
+      title: "Find cross-brand threads",
+      description: "Use this when the user asks whether correspondence landed in the wrong brand or mailbox. Returns advisory findings where a message looks like it belongs to another brand, with evidence, reason codes and a confidence score.",
+      inputSchema: z.object({
+        mailbox_ids: z.array(z.string().max(64)).min(1).max(20),
+        after: dateTime.optional(),
+        before: dateTime.optional(),
+        limit: z.number().int().min(1).max(100).default(20),
+      }),
+      outputSchema: z.object({
+        findings: z.array(z.object({
+          message: messageSummarySchema,
+          actual_brand: z.string(),
+          expected_brands: z.array(z.string()),
+          confidence: z.number(),
+          reason_codes: z.array(z.string()),
+          evidence: z.array(z.string()),
+          follow_up_tool: z.literal("fetch_thread"),
+        })),
+        partial_failures: z.array(partialFailureSchema),
+        truncated: z.boolean(),
+        advisory_only: z.literal(true),
+      }),
+      annotations: externalReadAnnotations,
+      _meta: { securitySchemes: toolSecuritySchemes },
+    },
+    async (input, extra) => execute("find_cross_brand_threads", extra, "mail.read", allowLocalUnauthenticated, () =>
+      service.findCrossBrandThreads(input)),
   );
 
   if (writer) {

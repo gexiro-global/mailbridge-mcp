@@ -19,6 +19,7 @@ import type {
   RawAttachmentContent,
   RawMessageDetail,
   RawMessageSummary,
+  RawSourceChunk,
   ReadOnlyImapAdapter,
 } from "./types.js";
 
@@ -107,11 +108,16 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
       });
       try {
         assertReadOnlyMailbox(client);
+        if (input.expected_uid_validity !== undefined && currentUidValidity(client) !== input.expected_uid_validity) {
+          throw new MailBridgeError("Mailbox UIDVALIDITY changed while paging", "UIDVALIDITY_CHANGED");
+        }
         const query = buildSearchQuery(input);
         const found = await client.search(query, { uid: true });
         const uids = Array.isArray(found) ? found : [];
-        const candidateLimit = Math.min(Math.max(input.limit * 5, 50), 500);
-        const candidates = uids.slice(-candidateLimit).reverse();
+        const eligible = (input.before_uid === undefined ? uids : uids.filter((uid) => uid < input.before_uid!))
+          .sort((a, b) => a - b);
+        const candidateLimit = input.page_by_uid ? input.limit : Math.min(Math.max(input.limit * 5, 50), 500);
+        const candidates = eligible.slice(-candidateLimit).reverse();
         if (candidates.length === 0) return [];
 
         const messages = await client.fetchAll(
@@ -133,12 +139,15 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
         );
         return summaries
           .filter((message) => input.has_attachment === undefined || message.attachments.length > 0 === input.has_attachment)
-          .sort((a, b) => b.received_at.localeCompare(a.received_at))
+          .sort(input.page_by_uid
+            ? (a, b) => b.uid - a.uid
+            : (a, b) => b.received_at.localeCompare(a.received_at))
           .slice(0, input.limit);
       } finally {
         lock.release();
       }
     } catch (error) {
+      if (error instanceof MailBridgeError) throw error;
       throw toMailBridgeError(error);
     } finally {
       await closeClient(client);
@@ -184,6 +193,54 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
           html_body: typeof parsed?.html === "string" ? parsed.html : null,
           references: normalizeReferences(parsed?.references),
           source_truncated: Boolean(message.size && message.source && message.source.byteLength < message.size),
+          ...(message.source ? { source: message.source } : {}),
+        };
+      } finally {
+        lock.release();
+      }
+    } catch (error) {
+      if (error instanceof MailBridgeError) throw error;
+      throw toMailBridgeError(error);
+    } finally {
+      await closeClient(client);
+    }
+  }
+
+  async fetchRawSourceRange(
+    folder: string,
+    uidValidity: bigint,
+    uid: number,
+    offset: number,
+    maxBytes: number,
+  ): Promise<RawSourceChunk> {
+    const client = await this.#createClient();
+    try {
+      await client.connect();
+      const lock = await client.getMailboxLock(folder, {
+        readOnly: true,
+        acquireTimeout: 10_000,
+        maxLockHoldTime: 30_000,
+      });
+      try {
+        assertReadOnlyMailbox(client);
+        if (currentUidValidity(client) !== uidValidity) {
+          throw new MailBridgeError("Message identifier is stale after UIDVALIDITY changed", "UIDVALIDITY_CHANGED");
+        }
+        const message = await client.fetchOne(
+          uid,
+          {
+            uid: true,
+            size: true,
+            headers: true,
+            source: { start: offset, maxLength: Math.min(maxBytes, this.options.sourceMaxBytes) },
+          },
+          { uid: true },
+        );
+        if (!message) throw new MailBridgeError("Message no longer exists", "MESSAGE_NOT_FOUND");
+        return {
+          headers: serializeHeaders(await parseSource(message.headers)),
+          bytes: message.source ?? Buffer.alloc(0),
+          total_size: typeof message.size === "number" ? message.size : null,
         };
       } finally {
         lock.release();
@@ -229,6 +286,7 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
     uidValidity: bigint,
     uid: number,
     part: string,
+    offset: number,
     maxBytes: number,
   ): Promise<RawAttachmentContent> {
     const client = await this.#createClient();
@@ -250,25 +308,30 @@ export class ImapFlowReadOnlyAdapter implements ReadOnlyImapAdapter {
         if (!meta) throw new MailBridgeError("Attachment part does not exist on this message", "ATTACHMENT_NOT_FOUND");
 
         const cap = Math.max(1, Math.min(maxBytes, this.options.attachmentMaxBytes));
-        // BODY.PEEK semantics: the folder is opened read-only (EXAMINE), so downloading a
-        // body part cannot set \Seen or mutate any flag on the server.
+        // EXAMINE keeps the mailbox read-only; discard the decoded prefix without
+        // retaining it, then return one bounded chunk. A later call can continue.
         const download = await client.download(String(uid), part, { uid: true });
         const chunks: Buffer[] = [];
-        let total = 0;
+        let position = 0;
+        let returned = 0;
         let truncated = false;
         try {
           for await (const chunk of download.content) {
             const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-            if (total + buffer.byteLength > cap) {
-              const remaining = cap - total;
-              if (remaining > 0) chunks.push(buffer.subarray(0, remaining));
-              total = cap;
+            const startInChunk = Math.max(0, offset - position);
+            position += buffer.byteLength;
+            if (startInChunk >= buffer.byteLength) continue;
+            const available = buffer.subarray(startInChunk);
+            const remaining = cap - returned;
+            if (available.byteLength > remaining) {
+              if (remaining > 0) chunks.push(available.subarray(0, remaining));
+              returned += remaining;
               truncated = true;
               download.content.destroy();
               break;
             }
-            chunks.push(buffer);
-            total += buffer.byteLength;
+            chunks.push(available);
+            returned += available.byteLength;
           }
         } catch (streamError) {
           if (!truncated) throw streamError;

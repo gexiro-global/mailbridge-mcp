@@ -31,7 +31,7 @@ before a production deployment or submission.
    against this MailBridge process.
 3. In ChatGPT, select the tunnel, choose the authentication mode appropriate for
    that private deployment, acknowledge the custom-MCP warning and create the app.
-4. Refresh actions and verify the expected 11 read-only tools. Safe Send tools
+4. Refresh actions and verify the expected 15 read-only tools. Safe Send tools
    must be absent unless the global gate was deliberately enabled.
 
 Secure MCP Tunnel provides outbound-only MCP connectivity. It does not turn an

@@ -8,10 +8,14 @@ const expectedTools = [
   "fetch",
   "fetch_attachment",
   "fetch_message",
+  "fetch_messages",
+  "fetch_raw_message",
   "fetch_thread",
+  "find_cross_brand_threads",
   "list_attachments",
   "list_folders",
   "list_mailboxes",
+  "list_messages_page",
   "list_recent_messages",
   "mailbox_health",
   "open_mailbox_settings",
@@ -39,9 +43,9 @@ async function main(): Promise<void> {
   try {
     const discovered = await client.listTools();
     const names = discovered.tools.map((tool) => tool.name).sort();
-    assert(JSON.stringify(names) === JSON.stringify(expectedTools), `expected 11 read tools plus mailbox settings, received: ${names.join(", ")}`);
+    assert(JSON.stringify(names) === JSON.stringify(expectedTools), `expected 15 read tools plus mailbox settings, received: ${names.join(", ")}`);
     const mailReadTools = discovered.tools.filter((tool) => tool.name !== "open_mailbox_settings");
-    assert(mailReadTools.length === 11 && mailReadTools.every((tool) => tool.annotations?.readOnlyHint === true), "a mail read tool is not annotated read-only");
+    assert(mailReadTools.length === 15 && mailReadTools.every((tool) => tool.annotations?.readOnlyHint === true), "a mail read tool is not annotated read-only");
     const settingsTool = discovered.tools.find((tool) => tool.name === "open_mailbox_settings");
     assert(settingsTool?.annotations?.readOnlyHint === false && settingsTool.annotations.destructiveHint === false,
       "mailbox settings annotations are inaccurate");

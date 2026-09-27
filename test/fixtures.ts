@@ -1,4 +1,5 @@
 import { MailBridgeConfigSchema, type MailBridgeConfig, type MailboxConfig } from "../src/config/schema.js";
+import { MailBridgeError } from "../src/domain/errors.js";
 import type { FolderSummary, HealthResult } from "../src/domain/types.js";
 import type { ImapAdapterFactory } from "../src/imap/factory.js";
 import type { FolderSearchInput, RawMessageDetail, RawMessageSummary, ReadOnlyImapAdapter } from "../src/imap/types.js";
@@ -129,14 +130,36 @@ export class FakeAdapter implements ReadOnlyImapAdapter {
 
   async search(input: FolderSearchInput): Promise<RawMessageSummary[]> {
     if (this.failure) throw this.failure;
-    return this.messages.filter((message) => message.folder === input.folder).slice(0, input.limit);
+    const matches = this.messages.filter((message) =>
+      message.folder === input.folder &&
+      (input.before_uid === undefined || message.uid < input.before_uid));
+    if (input.expected_uid_validity !== undefined &&
+        matches.some((message) => message.uid_validity !== input.expected_uid_validity)) {
+      throw new MailBridgeError("Mailbox UIDVALIDITY changed while paging", "UIDVALIDITY_CHANGED");
+    }
+    if (input.page_by_uid) matches.sort((a, b) => b.uid - a.uid);
+    return matches.slice(0, input.limit);
   }
 
   async fetch(folder: string, uidValidity: bigint, uid: number, _maxBytes: number): Promise<RawMessageDetail> {
     if (this.failure) throw this.failure;
     const message = this.messages.find((entry) => entry.folder === folder && entry.uid === uid);
     if (!message || message.uid_validity !== uidValidity) throw new Error("not found");
+    if (message.source && message.source.byteLength > _maxBytes) {
+      return { ...message, source: message.source.subarray(0, _maxBytes), source_truncated: true };
+    }
     return message;
+  }
+
+  async fetchRawSourceRange(folder: string, uidValidity: bigint, uid: number, offset: number, maxBytes: number) {
+    if (this.failure) throw this.failure;
+    const message = this.messages.find((entry) => entry.folder === folder && entry.uid === uid && entry.uid_validity === uidValidity);
+    if (!message) throw new Error("not found");
+    return {
+      headers: message.headers,
+      bytes: message.source?.subarray(offset, offset + maxBytes) ?? Buffer.alloc(0),
+      total_size: message.source?.byteLength ?? null,
+    };
   }
 
   async verifyPeekInvariant(_folder: string, _maxBytes: number) {
