@@ -84,7 +84,12 @@ export class MailSendService {
       this.userKey,
       draftId,
       expectedVersion,
-      { ...this.#compose(input), attachments: payload.attachments },
+      {
+        ...this.#compose(input),
+        in_reply_to: payload.in_reply_to,
+        references: payload.references,
+        attachments: payload.attachments,
+      },
     );
   }
 

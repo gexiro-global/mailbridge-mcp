@@ -29,6 +29,8 @@ Microsoft or any email provider.
   paging, scoped cross-mailbox search, batch and raw MIME reads, threads,
   cross-brand findings and attachments;
 - IMAP `EXAMINE` and `BODY.PEEK` for non-mutating reads;
+- default search uses a provider's special-use `\All` folder plus Drafts, Junk
+  and Trash when available; explicit folder selection remains available;
 - raw MIME and attachment reads in offset-based chunks, with the configured
   byte cap applied to each response and all content treated as untrusted;
 - an Apps SDK settings widget that never returns a stored password;

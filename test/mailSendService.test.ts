@@ -184,6 +184,30 @@ describe("MailBridge Safe Send layer", () => {
     expect(transport.sent).toHaveLength(1);
   });
 
+  it("keeps reply threading when an unsent reply draft is edited", async () => {
+    const { writer, transport, mail } = setup();
+    const searched = await mail.searchMessages({ mailbox_ids: ["mbx_demo_gmail"], subject: "Example", limit: 1 });
+    const stableId = searched.messages[0]!.stable_message_id;
+    const draft = await writer.createReplyDraft({
+      mailbox_id: "mbx_demo_gmail",
+      stable_message_id: stableId,
+      text_body: "Original synthetic reply",
+    });
+    const updated = writer.updateDraft(draft.draft_id, draft.version, {
+      mailbox_id: draft.mailbox_id,
+      to: draft.to,
+      subject: draft.subject,
+      text_body: "Edited synthetic reply",
+    });
+
+    expect(updated.in_reply_to).toBe("<message-42@example.invalid>");
+    expect(updated.references).toEqual(draft.references);
+    const confirmation = writer.prepareDraftSend(draft.draft_id);
+    await writer.sendDraft(draft.draft_id, confirmation.confirmation_id, confirmation.draft_version);
+    expect(transport.sent[0]!.payload.in_reply_to).toBe("<message-42@example.invalid>");
+    expect(transport.sent[0]!.payload.references).toEqual(draft.references);
+  });
+
   it("builds reply threading from Message-ID, In-Reply-To and References", async () => {
     const { writer, transport, mail } = setup();
     const searched = await mail.searchMessages({ mailbox_ids: ["mbx_demo_gmail"], subject: "Example", limit: 1 });

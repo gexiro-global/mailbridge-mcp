@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.1 — 2026-09-27
+
+- bounded thread search concurrency and used the special-use `\All` mailbox,
+  plus distinct Drafts, Junk and Trash, for default searches when available;
+  explicit folder scopes still search the requested selectable folders;
+- preserved `In-Reply-To` and `References` when editing a reply draft;
+- added regression tests for both behaviors and updated the Safe Send widget URI.
+
 ## 2.2.0 — 2026-09-27
 
 - added mailbox-scoped knowledge search, explicit partial-failure and truncation
